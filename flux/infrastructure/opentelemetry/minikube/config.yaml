@@ -219,8 +219,8 @@ processors:
 exporters:
   logging:
     loglevel: info
-  jaeger:
-    endpoint: jaeger-collector.jaeger.svc.cluster.local:14250
+  otlp/jaeger:
+    endpoint: jaeger-collector.jaeger.svc.cluster.local:4317
     tls:
       insecure: true
 
@@ -236,12 +236,12 @@ service:
     logs:
       receivers: [ filelog, otlp ]
       processors: [ resource, memory_limiter, resourcedetection, k8sattributes, batch ]
-      exporters: [ jaeger, logging ]
+      exporters: [ otlp/jaeger, logging ]
     traces:
       receivers: [ otlp ]
       processors: [ resource, memory_limiter, resourcedetection, tail_sampling, groupbytrace/custom, k8sattributes, batch ]
-      exporters: [ jaeger, logging ]
+      exporters: [ otlp/jaeger, logging ]
 #    metrics:
 #      receivers: [ hostmetrics, otlp ]
 #      processors: [ resource, resourcedetection, k8sattributes, batch ]
-#      exporters: [ jaeger, logging ]
+#      exporters: [ otlp/jaeger, logging ]

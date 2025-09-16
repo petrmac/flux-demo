@@ -23,6 +23,8 @@ spec:
       enabled: true
       image:
         repository: jaegertracing/all-in-one
+      args:
+        - "--memory.max-traces=10000"
       resources:
         limits:
           cpu: 500m
@@ -30,6 +32,9 @@ spec:
         requests:
           cpu: 100m
           memory: 128Mi
+      extraEnv:
+        - name: COLLECTOR_OTLP_ENABLED
+          value: "true"
     storage:
       type: memory
     agent:
@@ -38,3 +43,11 @@ spec:
       enabled: false
     query:
       enabled: false
+    service:
+      type: ClusterIP
+      collector:
+        otlp:
+          grpc:
+            port: 4317
+          http:
+            port: 4318

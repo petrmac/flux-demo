@@ -70,5 +70,5 @@ spec:
   healthChecks:
     - apiVersion: apps/v1
       kind: Deployment
-      name: jaeger
+      name: jaeger-jaeger
       namespace: jaeger
