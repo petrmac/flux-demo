@@ -1,7 +1,28 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+
 namespace: opentelemetry
 
 resources:
   - ../base
   - instrumentation.yaml
+
+configMapGenerator:
+  - name: opentelemetry-collector-config
+    files:
+      - config.yaml
+  - name: opentelemetry-config
+    literals:
+      - gcp.project=crushlog
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    app: opentelemetry
+    component: opentelemetry-collector
+    type: generated
+  annotations:
+    note: generated
+
+images:
+  - name: otel/opentelemetry-collector-contrib
+    newTag: 0.102.1

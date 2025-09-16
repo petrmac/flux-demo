@@ -20,6 +20,7 @@ metadata:
 spec:
   dependsOn:
     - name: infrastructure-opentelemetry-operator
+    - name: infrastructure-jaeger
   interval: 10m0s
   sourceRef:
     kind: GitRepository
@@ -50,4 +51,24 @@ spec:
     - apiVersion: apps/v1
       kind: Deployment
       name: opentelemetry-operator
-      namespace: opentelemetry
+      namespace: opentelemetry-operator
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure-jaeger
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: infrastructure-sources
+  interval: 10m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./flux/infrastructure/jaeger/minikube
+  prune: true
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: jaeger
+      namespace: jaeger
