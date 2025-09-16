@@ -29,7 +29,7 @@ spec:
   healthChecks:
     - apiVersion: apps/v1
       kind: Deployment
-      name: opentelemetry-operator
+      name: opentelemetry
       namespace: opentelemetry
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
