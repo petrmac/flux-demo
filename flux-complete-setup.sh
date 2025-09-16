@@ -154,7 +154,7 @@ kubectl create secret generic flux-system \
     --dry-run=client -o yaml | kubectl apply -f -
 echo -e "${GREEN}✅ Git authentication secret created${NC}"
 
-# Create GitHub Container Registry secret
+# Create GitHub Container Registry secret in flux-system
 echo -e "${BLUE}Creating GHCR secret for image pulling...${NC}"
 kubectl create secret docker-registry ghcr-secret \
     --namespace=flux-system \
@@ -203,7 +203,38 @@ flux bootstrap github \
     --personal
 
 # ============================================================================
-# STEP 5: Verify Installation
+# STEP 5: Post-Bootstrap Configuration
+# ============================================================================
+print_section "🔧 Post-Bootstrap Configuration"
+
+echo -e "${BLUE}Waiting for Flux to create demo-service namespace...${NC}"
+for i in {1..30}; do
+    if kubectl get namespace demo-service &> /dev/null; then
+        echo -e "${GREEN}✅ demo-service namespace found${NC}"
+        break
+    fi
+    echo -n "."
+    sleep 2
+done
+
+# Replicate GHCR secret to demo-service namespace
+if kubectl get namespace demo-service &> /dev/null; then
+    echo -e "${BLUE}Replicating GHCR secret to demo-service namespace...${NC}"
+    kubectl create secret docker-registry ghcr-secret \
+        --namespace=demo-service \
+        --docker-server=ghcr.io \
+        --docker-username="$GITHUB_USER" \
+        --docker-password="$GITHUB_TOKEN" \
+        --docker-email="${GITHUB_USER}@users.noreply.github.com" \
+        --dry-run=client -o yaml | kubectl apply -f -
+    echo -e "${GREEN}✅ GHCR secret replicated to demo-service namespace${NC}"
+else
+    echo -e "${YELLOW}⚠️  demo-service namespace not found. You may need to manually create the GHCR secret later.${NC}"
+    echo -e "${YELLOW}Run: kubectl create secret docker-registry ghcr-secret --namespace=demo-service --docker-server=ghcr.io --docker-username=<USERNAME> --docker-password=<TOKEN>${NC}"
+fi
+
+# ============================================================================
+# STEP 6: Verify Installation
 # ============================================================================
 print_section "✅ Verifying Installation"
 
@@ -217,7 +248,7 @@ echo -e "\n${BLUE}Kustomization status:${NC}"
 flux get kustomizations
 
 # ============================================================================
-# STEP 6: Post-Setup Instructions
+# STEP 7: Post-Setup Instructions
 # ============================================================================
 print_section "🎉 Setup Complete!"
 
