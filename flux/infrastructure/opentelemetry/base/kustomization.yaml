@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: opentelemetry
 
 resources:
+  - namespace.yaml
   - opentelemetry-service.yaml
   - opentelemetry-daemonset.yaml
   - opentelemetry-rbac.yaml

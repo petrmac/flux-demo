@@ -3,5 +3,6 @@ kind: Kustomization
 namespace: opentelemetry-operator
 
 resources:
+  - namespace.yaml
   - opentelemetry-helm-repository.yaml
   - opentelemetry-operator.yaml
