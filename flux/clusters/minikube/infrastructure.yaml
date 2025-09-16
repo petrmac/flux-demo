@@ -29,8 +29,8 @@ spec:
   prune: true
   healthChecks:
     - apiVersion: apps/v1
-      kind: Deployment
-      name: opentelemetry
+      kind: DaemonSet
+      name: opentelemetry-collector
       namespace: opentelemetry
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
