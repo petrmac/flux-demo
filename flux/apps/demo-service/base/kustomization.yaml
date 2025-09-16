@@ -6,13 +6,6 @@ namespace: demo-service
 resources:
   - namespace.yaml
   - serviceaccount.yaml
-  - configmap.yaml
-  - secret.enc.yaml
   - deployment.yaml
   - service.yaml
-  - instrumentation.yaml
-  - image-automation/
-
-commonLabels:
-  app.kubernetes.io/managed-by: flux
-  app.kubernetes.io/part-of: demo-platform
+  - image/

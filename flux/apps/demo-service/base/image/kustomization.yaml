@@ -6,6 +6,5 @@ namespace: flux-system
 resources:
   - image-repository.yaml
   - image-policy.yaml
-  - image-update-automation.yaml
   # Uncomment when using private registries:
   # - registry-secret.yaml

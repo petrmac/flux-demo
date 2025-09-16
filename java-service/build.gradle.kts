@@ -5,11 +5,16 @@ plugins {
     id("io.spring.dependency-management") version "1.1.4"
     kotlin("jvm") version "1.9.21"
     kotlin("plugin.spring") version "1.9.21"
+    id("org.shipkit.shipkit-changelog") version "2.0.1"
+    id("org.shipkit.shipkit-github-release") version "2.0.1"
+    id("org.shipkit.shipkit-auto-version") version "2.1.0"
     java
 }
 
 group = "com.example"
-version = "1.0.0"
+// Version will be managed by Shipkit auto-version
+// It reads from version.properties file or previous git tags
+version = project.findProperty("version") ?: "1.0.0"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
@@ -75,4 +80,59 @@ tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
 
 tasks.named<Jar>("jar") {
     enabled = false
+}
+
+// Shipkit configuration for automated releases
+tasks.named("generateChangelog") {
+    outputs.upToDateWhen { false }
+    doFirst {
+        project.ext.set("changelog.previousRevision",
+            project.findProperty("changelog.previousRevision") ?: "v1.0.0")
+    }
+}
+
+tasks.named("githubRelease") {
+    dependsOn("generateChangelog")
+    doFirst {
+        val githubToken = System.getenv("GITHUB_TOKEN")
+        if (githubToken.isNullOrEmpty()) {
+            throw GradleException("GITHUB_TOKEN environment variable is not set")
+        }
+    }
+}
+
+// Configure Shipkit auto-version
+configure<org.shipkit.auto.version.AutoVersionExtension> {
+    tagPrefix = "v"
+    versionFile = file("version.properties")
+}
+
+// Task to print the version
+tasks.register("printVersion") {
+    doLast {
+        println(project.version)
+    }
+}
+
+// Task to increment version
+tasks.register("incrementVersion") {
+    doLast {
+        val versionFile = file("version.properties")
+        val lines = versionFile.readLines()
+        val newLines = lines.map { line ->
+            if (line.startsWith("version=")) {
+                val currentVersion = line.substringAfter("version=")
+                val parts = currentVersion.split(".")
+                val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
+                val newVersion = "${parts[0]}.${parts[1]}.${patch + 1}"
+                "version=$newVersion"
+            } else if (line.startsWith("previousVersion=")) {
+                "previousVersion=${project.version}"
+            } else {
+                line
+            }
+        }
+        versionFile.writeText(newLines.joinToString("\n"))
+        println("Version incremented to: ${newLines.find { it.startsWith("version=") }?.substringAfter("version=")}")
+    }
 }

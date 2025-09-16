@@ -9,7 +9,7 @@ metadata:
   annotations:
     fluxcd.io/automated: "true"
 spec:
-  replicas: 2
+  replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -28,7 +28,9 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
         prometheus.io/path: "/actuator/prometheus"
-        instrumentation.opentelemetry.io/inject-java: "true"
+        instrumentation.opentelemetry.io/inject-java: "opentelemetry/opentelemetry-collector"
+        instrumentation.opentelemetry.io/container-names: "demo-service"
+        configmap.reloader.stakater.com/reload: "demo-service-config"
     spec:
       serviceAccountName: demo-service
       securityContext:
@@ -37,7 +39,7 @@ spec:
         fsGroup: 1001
       containers:
       - name: demo-service
-        image: demo-service:1.0.0 # {"$imagepolicy": "flux-system:demo-service"}
+        image: ghcr.io/petrmac/flux-demo/demo-service:1.0.0 # {"$imagepolicy": "flux-system:demo-service"}
         imagePullPolicy: IfNotPresent
         ports:
         - name: http
@@ -61,12 +63,6 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
-        - name: OTEL_SERVICE_NAME
-          value: "demo-service"
-        - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: "http://otel-collector.opentelemetry.svc.cluster.local:4317"
-        - name: OTEL_RESOURCE_ATTRIBUTES
-          value: "service.namespace=$(NAMESPACE),k8s.pod.name=$(POD_NAME),k8s.node.name=$(NODE_NAME)"
         resources:
           requests:
             memory: "256Mi"

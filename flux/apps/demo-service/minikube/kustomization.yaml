@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../base
+  - image-update-automation.yaml
+  - configmap.yaml
+  - secret.enc.yaml
+images:
+  - name: demo-service # {"$imagepolicy": "flux-system:demo-service"}
+    newTag: 1.0.0 # {"$imagepolicy": "api:api-backend:tag"}

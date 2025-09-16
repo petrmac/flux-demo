@@ -4,7 +4,7 @@ metadata:
   name: demo-service
   namespace: flux-system
 spec:
-  image: ghcr.io/your-org/demo-service
+  image: ghcr.io/petrmac/flux-demo/demo-service
   interval: 5m
   # For public registries, no secretRef needed
   # For private registries, uncomment and configure:
