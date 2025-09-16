@@ -1,6 +1,7 @@
 package com.example.demo.controller;
 
 import com.example.demo.service.GreetingService;
+import io.micrometer.core.annotation.Timed;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +26,7 @@ public class DemoController {
     @Value("${app.version:1.0.0}")
     private String version;
 
+    @Timed(histogram = true)
     @GetMapping("/greeting/{name}")
     public ResponseEntity<Map<String, Object>> greeting(@PathVariable String name) {
         log.info("Greeting request received for: {}", name);
@@ -38,6 +40,7 @@ public class DemoController {
         return ResponseEntity.ok(response);
     }
 
+    @Timed
     @GetMapping("/health")
     public ResponseEntity<Map<String, String>> health() {
         Map<String, String> response = new HashMap<>();
@@ -48,6 +51,7 @@ public class DemoController {
         return ResponseEntity.ok(response);
     }
 
+    @Timed
     @GetMapping("/info")
     public ResponseEntity<Map<String, Object>> info() {
         Map<String, Object> response = new HashMap<>();
