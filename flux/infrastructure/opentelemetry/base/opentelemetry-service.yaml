@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: opentelemetry-collector
+  namespace: opentelemetry
+  labels:
+    app: opentelemetry
+    component: opentelemetry-collector
+spec:
+  ports:
+    - port: 4317
+      name: oltp-grpc
+      protocol: TCP
+    - port: 4318
+      name: oltp-http
+      protocol: TCP
+    - port: 55678
+      name: opencensus
+      protocol: TCP
+    - port: 9411
+      name: zipkin
+      protocol: TCP
+    - port: 14268
+      name: jaeger-thrift
+      protocol: TCP
+    - port: 14250
+      name: jaeger-grpc
+      protocol: TCP
+    - port: 8888
+      name: prometheus-metrics
+      protocol: TCP
+    - name: grpc # Default endpoint for OpenTelemetry receiver.
+      port: 55680
+      protocol: TCP
+      targetPort: 55680
+    - name: http # Default endpoint for OpenTelemetry receiver.
+      port: 55681
+      protocol: TCP
+      targetPort: 55681
+  selector:
+    component: opentelemetry-collector

@@ -1,0 +1,40 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: opentelemetry-operator
+  namespace: opentelemetry-operator
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: opentelemetry-operator
+      version: "0.84.2"
+      sourceRef:
+        kind: HelmRepository
+        name: opentelemetry-helm-charts
+        namespace: opentelemetry-operator
+      interval: 1h
+  values:
+    manager:
+      collectorImage:
+        repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib
+      resources:
+        limits:
+          cpu: 50m
+          memory: 128Mi
+        requests:
+          cpu: 10m
+          memory: 64Mi
+    admissionWebhooks:
+      certManager:
+        enabled: false
+      autoGenerateCert:
+        enabled: true
+    kubeRBACProxy:
+      resources:
+        limits:
+          cpu: 20m
+          memory: 48Mi
+        requests:
+          cpu: 5m
+          memory: 16Mi

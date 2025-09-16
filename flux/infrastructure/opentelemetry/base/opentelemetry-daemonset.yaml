@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: opentelemetry-collector
+  namespace: opentelemetry
+  labels:
+    app: opentelemetry
+    component: opentelemetry-collector
+spec:
+  selector:
+    matchLabels:
+      app: opentelemetry
+      component: opentelemetry-collector
+  template:
+    metadata:
+      annotations:
+        configmap.reloader.stakater.com/reload: "opentelemetry-collector-config"
+      labels:
+        app: opentelemetry
+        component: opentelemetry-collector
+    spec:
+      serviceAccountName: opentelemetry-sa
+      containers:
+        - name: opentelemetry-collector
+          image: otel/opentelemetry-collector-contrib
+          resources:
+            limits:
+              memory: 1Gi
+            requests:
+              cpu: 50m
+              memory: 100Mi
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            # The k8s.pod.ip is used to associate pods with k8sattributes.
+            # It is useful to have in the Collector pod because receiver metrics can also
+            # benefit from the tags.
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "k8s.pod.ip=$(POD_IP)"
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            # The application SDK must use this environment variable in order to successfully
+            # connect to the DaemonSet's collector.
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://$(HOST_IP):4318"
+          volumeMounts:
+            - mountPath: /etc/otelcol-contrib/config.yaml
+              name: data
+              subPath: config.yaml
+              readOnly: true
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: data
+          configMap:
+            name: opentelemetry-collector-config
