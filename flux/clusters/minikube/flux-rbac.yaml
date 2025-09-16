@@ -1,0 +1,69 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flux-system-role
+rules:
+# Core API access
+- apiGroups: [""]
+  resources: ["namespaces", "services", "pods", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Apps API for deployments, statefulsets, etc.
+- apiGroups: ["apps"]
+  resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Flux source resources
+- apiGroups: ["source.toolkit.fluxcd.io"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Flux kustomize resources
+- apiGroups: ["kustomize.toolkit.fluxcd.io"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Flux helm resources
+- apiGroups: ["helm.toolkit.fluxcd.io"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Flux notification resources
+- apiGroups: ["notification.toolkit.fluxcd.io"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Flux image resources
+- apiGroups: ["image.toolkit.fluxcd.io"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Leader election access
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Events access
+- apiGroups: ["events.k8s.io"]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: flux-system-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: flux-system-role
+subjects:
+- kind: ServiceAccount
+  name: source-controller
+  namespace: flux-system
+- kind: ServiceAccount
+  name: kustomize-controller
+  namespace: flux-system
+- kind: ServiceAccount
+  name: helm-controller
+  namespace: flux-system
+- kind: ServiceAccount
+  name: notification-controller
+  namespace: flux-system
+- kind: ServiceAccount
+  name: image-reflector-controller
+  namespace: flux-system
+- kind: ServiceAccount
+  name: image-automation-controller
+  namespace: flux-system

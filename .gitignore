@@ -48,3 +48,9 @@ logs/
 # Local test files
 test-*.yaml
 local-*.yaml
+
+# Minikube mount PID
+.minikube-mount.pid
+
+# Don't ignore gradle wrapper jar
+!java-service/gradle/wrapper/gradle-wrapper.jar

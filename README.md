@@ -58,6 +58,14 @@ flux-demo/
 
 ## 📦 Installation
 
+### ⚠️ IMPORTANT: Update Git Repository URL
+
+Before running setup, edit `flux/clusters/minikube/flux-system/gotk-sync.yaml`:
+```yaml
+# Replace <your-username> with your GitHub username
+url: https://github.com/YOUR-USERNAME/flux-demo
+```
+
 ### 1. Start Minikube
 
 ```bash

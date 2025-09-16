@@ -88,6 +88,21 @@ echo -e "${GREEN}✅ Flux system components applied${NC}"
 echo -e "\n⏳ Waiting for Flux to be ready..."
 flux check
 
+# Setup GitHub authentication if needed
+echo -e "\n🔐 Setting up GitHub authentication..."
+echo -e "${YELLOW}Flux needs GitHub authentication to:${NC}"
+echo "  - Read from private repositories"
+echo "  - Write image updates back to Git"
+echo ""
+read -p "Do you want to set up GitHub authentication now? (y/N) " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    "$SCRIPT_DIR/setup-github-auth.sh"
+else
+    echo -e "${YELLOW}⚠️  Skipping GitHub auth setup${NC}"
+    echo -e "${YELLOW}You can run './scripts/setup-github-auth.sh' later${NC}"
+fi
+
 # Apply infrastructure
 echo -e "\n🏗️  Deploying infrastructure..."
 kubectl apply -f "$PROJECT_ROOT/flux/clusters/minikube/infrastructure.yaml"
