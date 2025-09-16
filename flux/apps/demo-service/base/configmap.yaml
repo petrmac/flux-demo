@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-service-config
+  namespace: demo-service
+  labels:
+    app.kubernetes.io/name: demo-service
+    app.kubernetes.io/component: config
+data:
+  APP_VERSION: "1.0.0"
+  ENVIRONMENT: "production"
+  GREETING_PREFIX: "Greetings"
+  GREETING_SUFFIX: "Welcome to our Kubernetes-powered service!"
+  JAVA_OPTS: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"

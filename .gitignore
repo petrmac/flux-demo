@@ -1,0 +1,50 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# Java
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.logs
+hs_err_pid*
+
+# Gradle
+.gradle/
+build/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+.gradletasknamecache
+
+# SOPS
+age.key
+*.agekey
+*.dec.yaml
+
+# MacOS
+.DS_Store
+
+# Kubernetes
+*.kubeconfig
+kubeconfig
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+*.old
+
+# Logs
+*.log
+logs/
+
+# Local test files
+test-*.yaml
+local-*.yaml

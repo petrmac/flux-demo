@@ -1,0 +1,66 @@
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: demo-service
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: demo-service
+  policy:
+    semver:
+      range: '>=1.0.0'
+---
+# Policy for selecting latest patch version in 1.0.x
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: demo-service-patch
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: demo-service
+  policy:
+    semver:
+      range: '~1.0.0'
+---
+# Policy for selecting latest minor version in 1.x
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: demo-service-minor
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: demo-service
+  policy:
+    semver:
+      range: '^1.0.0'
+---
+# Policy for development/feature branches
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: demo-service-dev
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: demo-service
+  filterTags:
+    pattern: '^dev-.*'
+    extract: '$0'
+  policy:
+    alphabetical:
+      order: desc
+---
+# Policy for selecting by timestamp
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: demo-service-latest
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: demo-service-local
+  policy:
+    numerical:
+      order: asc

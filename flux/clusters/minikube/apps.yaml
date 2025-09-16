@@ -1,0 +1,46 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: demo-service
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: infrastructure-opentelemetry
+  interval: 5m0s
+  path: ./flux/apps/demo-service/overlays/dev
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  targetNamespace: demo-service
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: demo-service
+      namespace: demo-service
+  patches:
+    - patch: |
+        - op: replace
+          path: /spec/replicas
+          value: 1
+      target:
+        kind: Deployment
+        name: demo-service
+    # For local development, use latest tag
+    - patch: |
+        - op: replace
+          path: /spec/template/spec/containers/0/image
+          value: demo-service:latest
+      target:
+        kind: Deployment
+        name: demo-service
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-config
+        optional: true

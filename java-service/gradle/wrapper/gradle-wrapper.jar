@@ -1,0 +1,4 @@
+# This is a placeholder for the actual gradle-wrapper.jar
+# In a real project, this would be the binary JAR file
+# You can generate it by running: gradle wrapper
+# The file is required for the Gradle wrapper to work

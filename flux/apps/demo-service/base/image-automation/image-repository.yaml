@@ -1,0 +1,35 @@
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: demo-service
+  namespace: flux-system
+spec:
+  image: ghcr.io/your-org/demo-service
+  interval: 5m
+  # For public registries, no secretRef needed
+  # For private registries, uncomment and configure:
+  # secretRef:
+  #   name: ghcr-auth
+---
+# Alternative for Docker Hub
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: demo-service-dockerhub
+  namespace: flux-system
+spec:
+  image: docker.io/yourusername/demo-service
+  interval: 5m
+  # secretRef:
+  #   name: dockerhub-auth
+---
+# For local development with Minikube
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: demo-service-local
+  namespace: flux-system
+spec:
+  image: demo-service
+  interval: 1m
+  # This will scan the local Docker daemon
