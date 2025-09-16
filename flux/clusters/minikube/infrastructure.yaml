@@ -24,7 +24,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
-  path: ./flux/infrastructure/opentelemetry
+  path: ./flux/infrastructure/opentelemetry/minikube
   prune: true
   healthChecks:
     - apiVersion: apps/v1
@@ -44,7 +44,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
-  path: ./flux/infrastructure/opentelemetry-operator
+  path: ./flux/infrastructure/opentelemetry-operator/minikube
   prune: true
   healthChecks:
     - apiVersion: apps/v1
