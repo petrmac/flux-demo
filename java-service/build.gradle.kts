@@ -82,29 +82,16 @@ tasks.named<Jar>("jar") {
     enabled = false
 }
 
-// Shipkit configuration for automated releases
-tasks.named("generateChangelog") {
-    outputs.upToDateWhen { false }
-    doFirst {
-        project.ext.set("changelog.previousRevision",
-            project.findProperty("changelog.previousRevision") ?: "v1.0.0")
+// Shipkit configuration - tasks are created by plugins
+// Configure existing tasks if they exist
+afterEvaluate {
+    tasks.findByName("generateChangelog")?.apply {
+        outputs.upToDateWhen { false }
     }
-}
 
-tasks.named("githubRelease") {
-    dependsOn("generateChangelog")
-    doFirst {
-        val githubToken = System.getenv("GITHUB_TOKEN")
-        if (githubToken.isNullOrEmpty()) {
-            throw GradleException("GITHUB_TOKEN environment variable is not set")
-        }
+    tasks.findByName("githubRelease")?.apply {
+        dependsOn("generateChangelog")
     }
-}
-
-// Configure Shipkit auto-version
-configure<org.shipkit.auto.version.AutoVersionExtension> {
-    tagPrefix = "v"
-    versionFile = file("version.properties")
 }
 
 // Task to print the version
