@@ -1,0 +1,55 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- gotk-components.yaml
+- gotk-sync.yaml
+
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: source-controller
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 20m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 32Mi
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: kustomize-controller
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 40m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 40Mi
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: helm-controller
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 30m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 40Mi
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: notification-controller
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 20m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 32Mi
