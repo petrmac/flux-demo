@@ -19,7 +19,7 @@ metadata:
   namespace: flux-system
 spec:
   dependsOn:
-    - name: infrastructure-sources
+    - name: infrastructure-opentelemetry-operator
   interval: 10m0s
   sourceRef:
     kind: GitRepository
