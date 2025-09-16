@@ -37,6 +37,7 @@ dependencies {
     // Spring Boot Starters
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-starter-aop")
 
     // Kotlin
     implementation("org.jetbrains.kotlin:kotlin-reflect")
@@ -85,12 +86,19 @@ tasks.named<Jar>("jar") {
 // Shipkit configuration - tasks are created by plugins
 // Configure existing tasks if they exist
 afterEvaluate {
-    tasks.findByName("generateChangelog")?.apply {
-        outputs.upToDateWhen { false }
+    tasks.findByName("generateChangelog")?.let { task ->
+        task.outputs.upToDateWhen { false }
+        // Configure changelog task properties
+        task.setProperty("repository", "petrmac/flux-demo")
+        task.setProperty("outputFile", file("build/changelog.md"))
     }
 
-    tasks.findByName("githubRelease")?.apply {
-        dependsOn("generateChangelog")
+    tasks.findByName("githubRelease")?.let { task ->
+        task.dependsOn("generateChangelog")
+        task.setProperty("repository", "petrmac/flux-demo")
+        task.setProperty("changelog", file("build/changelog.md"))
+        task.setProperty("newTagRevision", "HEAD")
+        task.setProperty("githubToken", System.getenv("GITHUB_TOKEN") ?: "")
     }
 }
 
