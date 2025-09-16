@@ -241,7 +241,7 @@ service:
       receivers: [ otlp ]
       processors: [ resource, memory_limiter, resourcedetection, tail_sampling, groupbytrace/custom, k8sattributes, batch ]
       exporters: [ otlp/jaeger, logging ]
-#    metrics:
-#      receivers: [ hostmetrics, otlp ]
-#      processors: [ resource, resourcedetection, k8sattributes, batch ]
-#      exporters: [ otlp/jaeger, logging ]
+    metrics:
+      receivers: [ hostmetrics, otlp ]
+      processors: [ resource, resourcedetection, k8sattributes, batch ]
+      exporters: [ logging ]

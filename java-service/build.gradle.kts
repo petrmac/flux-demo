@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import java.io.ByteArrayOutputStream
 
 plugins {
     id("org.springframework.boot") version "3.2.1"
@@ -95,9 +96,23 @@ afterEvaluate {
 
     tasks.findByName("githubRelease")?.let { task ->
         task.dependsOn("generateChangelog")
+        task.doFirst {
+            // Check if the tag already exists
+            val tagName = "v${project.version}"
+            val outputStream = ByteArrayOutputStream()
+            val result = exec {
+                commandLine("git", "tag", "-l", tagName)
+                standardOutput = outputStream
+                isIgnoreExitValue = true
+            }
+            if (result.exitValue == 0 && outputStream.toString().trim().isNotEmpty()) {
+                println("Tag $tagName already exists, skipping release")
+                task.enabled = false
+            }
+        }
         task.setProperty("repository", "petrmac/flux-demo")
         task.setProperty("changelog", file("build/changelog.md"))
-        task.setProperty("newTagRevision", "HEAD")
+        task.setProperty("newTagRevision", "main")
         task.setProperty("githubToken", System.getenv("GITHUB_TOKEN") ?: "")
     }
 }
@@ -106,6 +121,27 @@ afterEvaluate {
 tasks.register("printVersion") {
     doLast {
         println(project.version)
+    }
+}
+
+// Task to check if release is needed
+tasks.register("checkReleaseNeeded") {
+    doLast {
+        val tagName = "v${project.version}"
+        val outputStream = ByteArrayOutputStream()
+        val result = exec {
+            commandLine("git", "tag", "-l", tagName)
+            standardOutput = outputStream
+            isIgnoreExitValue = true
+        }
+        val tagExists = result.exitValue == 0 && outputStream.toString().trim().isNotEmpty()
+        if (tagExists) {
+            println("RELEASE_NEEDED=false")
+            println("Tag $tagName already exists")
+        } else {
+            println("RELEASE_NEEDED=true")
+            println("Tag $tagName does not exist, release needed")
+        }
     }
 }
 

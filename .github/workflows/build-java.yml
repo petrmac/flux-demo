@@ -142,7 +142,20 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./java-service/gradlew
 
+      - name: Check if release needed
+        id: check_release
+        run: |
+          cd java-service
+          OUTPUT=$(./gradlew -q checkReleaseNeeded)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q "RELEASE_NEEDED=true"; then
+            echo "release_needed=true" >> $GITHUB_OUTPUT
+          else
+            echo "release_needed=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create GitHub Release with Shipkit
+        if: steps.check_release.outputs.release_needed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -150,6 +163,7 @@ jobs:
           ./gradlew githubRelease
 
       - name: Increment version for next release
+        if: steps.check_release.outputs.release_needed == 'true'
         run: |
           cd java-service
           ./gradlew incrementVersion
