@@ -33,6 +33,8 @@ spec:
         configmap.reloader.stakater.com/reload: "demo-service-config"
     spec:
       serviceAccountName: demo-service
+      imagePullSecrets:
+      - name: ghcr-secret
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
