@@ -260,7 +260,7 @@ kubectl port-forward -n demo-service svc/demo-service 8080:8080
 ```
 ```bash
 # Port-forward Jaeger UI
-kubectl port-forward -n jaeger svc/jaeger-query 16686:80
+kubectl port-forward -n jaeger svc/jaeger-query 8086:16686
 ```
 
 ### Test Service Communication
