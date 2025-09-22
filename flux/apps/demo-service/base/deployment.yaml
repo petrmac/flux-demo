@@ -65,6 +65,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        - name: SPRING_PROFILES_ACTIVE
+          value: kubernetes,default
         resources:
           requests:
             memory: "256Mi"

@@ -7,20 +7,25 @@ server:
   shutdown: graceful
 
 management:
+  server:
+    port: ${SERVER_MANAGEMENT_PORT:4000}
+  health:
+    diskspace:
+      enabled: false
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: "*"
+    access:
+      default: unrestricted
   endpoint:
     health:
-      show-details: always
-  metrics:
-    tags:
-      application: ${spring.application.name}
-  prometheus:
+      show-details: ALWAYS
+      access: unrestricted
     metrics:
-      export:
-        enabled: true
+      access: read_only
+    prometheus:
+      access: read_only
 
 app:
   version: ${APP_VERSION:1.0.0}
