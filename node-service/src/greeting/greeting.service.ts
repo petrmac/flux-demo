@@ -15,9 +15,7 @@ export class GreetingService {
   async getGreeting(name: string) {
     try {
       const response = await firstValueFrom(
-        this.httpService.get(`${this.javaServiceUrl}/api/greeting`, {
-          params: { name },
-        }),
+        this.httpService.get(`${this.javaServiceUrl}/api/greeting/${encodeURIComponent(name)}`),
       );
 
       return {

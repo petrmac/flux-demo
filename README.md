@@ -253,10 +253,12 @@ annotations:
 ```bash
 # Port-forward Node Service
 kubectl port-forward -n node-service svc/node-service 3000:3000
-
+```
+```bash
 # Port-forward Java Service (optional, for direct testing)
 kubectl port-forward -n demo-service svc/demo-service 8080:8080
-
+```
+```bash
 # Port-forward Jaeger UI
 kubectl port-forward -n jaeger svc/jaeger-query 16686:80
 ```
