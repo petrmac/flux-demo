@@ -33,15 +33,15 @@ spec:
         configmap.reloader.stakater.com/reload: "demo-service-config"
     spec:
       serviceAccountName: demo-service
-      imagePullSecrets:
-      - name: ghcr-secret
+#      imagePullSecrets:
+#      - name: ghcr-secret
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
         fsGroup: 1001
       containers:
       - name: demo-service
-        image: ghcr.io/petrmac/flux-demo/demo-service:1.0.0 # {"$imagepolicy": "flux-system:demo-service"}
+        image: ghcr.io/petrmac/flux-demo/demo-service
         imagePullPolicy: IfNotPresent
         ports:
         - name: http

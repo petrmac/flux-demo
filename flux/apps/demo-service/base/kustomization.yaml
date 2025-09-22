@@ -6,6 +6,7 @@ namespace: demo-service
 resources:
   - namespace.yaml
   - serviceaccount.yaml
+#  - ghcr-secret.yaml
   - deployment.yaml
   - service.yaml
   - image/

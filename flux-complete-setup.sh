@@ -186,12 +186,16 @@ if [[ $REPLY =~ ^[Nn]$ ]]; then
     echo "  --branch=${GITHUB_BRANCH} \\"
     echo "  --path=flux/clusters/${CONTEXT} \\"
     echo "  --components-extra=image-reflector-controller,image-automation-controller \\"
-    echo "  --read-write-key \\"
+    echo "  --token-auth \\"
     echo "  --personal"
+    echo ""
+    echo "Note: Make sure GITHUB_TOKEN is exported in your environment"
     exit 0
 fi
 
 # Run Flux bootstrap
+# Note: --read-write-key uses SSH, which requires SSH key setup
+# Using --token-auth for HTTPS authentication with the GitHub token
 flux bootstrap github \
     --context="${CONTEXT}" \
     --owner="${GITHUB_USER}" \
@@ -199,7 +203,7 @@ flux bootstrap github \
     --branch="${GITHUB_BRANCH}" \
     --components-extra=image-reflector-controller,image-automation-controller \
     --path=flux/clusters/${CONTEXT} \
-    --read-write-key \
+    --token-auth \
     --personal
 
 # ============================================================================
