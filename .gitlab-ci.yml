@@ -105,6 +105,8 @@ build-docker:
   variables:
     DOCKER_DRIVER: overlay2
     DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_BUILDKIT: 1
+    BUILDKIT_PROGRESS: plain
   before_script:
     - source java-service/version.env
     - echo "Building version $VERSION"
@@ -115,8 +117,10 @@ build-docker:
         echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
       fi
 
-      # Build Docker image
+      # Build Docker image with BuildKit caching
       docker build \
+        --cache-from $JAVA_IMAGE_NAME:latest \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
         --build-arg VERSION=$VERSION \
         --build-arg COMMIT_SHA=$CI_COMMIT_SHA \
         --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
@@ -284,6 +288,8 @@ build-docker-node:
   variables:
     DOCKER_DRIVER: overlay2
     DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_BUILDKIT: 1
+    BUILDKIT_PROGRESS: plain
   script:
     - |
       # Login to GitLab Container Registry (only for non-MR pipelines)
@@ -296,8 +302,10 @@ build-docker-node:
       SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-8)
       DATE_TAG=$(date -u +'%Y.%m.%d')
 
-      # Build Docker image
+      # Build Docker image with BuildKit caching
       docker build \
+        --cache-from $NODE_IMAGE_NAME:latest \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
         -t $NODE_IMAGE_NAME:$BRANCH_TAG-$SHORT_SHA \
         -t $NODE_IMAGE_NAME:$DATE_TAG-$SHORT_SHA \
         -f node-service/Dockerfile \
