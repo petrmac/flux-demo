@@ -115,9 +115,19 @@ build-docker:
     - echo "Building version $VERSION"
   script:
     - |
-      # Login to GitLab Container Registry first (only for non-MR pipelines)
-      if [ -z "$CI_MERGE_REQUEST_ID" ]; then
+      # Login to GitLab Container Registry
+      # Try CI_JOB_TOKEN first (automatically provided), then fall back to deploy token or PAT
+      if [ -n "$CI_JOB_TOKEN" ]; then
+        echo "Logging in with CI_JOB_TOKEN"
+        echo "$CI_JOB_TOKEN" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+      elif [ -n "$CI_DEPLOY_USER" ] && [ -n "$CI_DEPLOY_PASSWORD" ]; then
+        echo "Logging in with deploy token"
+        echo "$CI_DEPLOY_PASSWORD" | docker login -u "$CI_DEPLOY_USER" --password-stdin $CI_REGISTRY
+      elif [ -n "$CI_REGISTRY_PASSWORD" ]; then
+        echo "Logging in with registry credentials"
         echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+      else
+        echo "Warning: No registry credentials found, attempting to proceed without login"
       fi
 
       # Setup Docker Buildx for multi-platform builds
@@ -202,13 +212,16 @@ check-release:
       OUTPUT=$(./gradlew -q checkReleaseNeeded)
       echo "$OUTPUT"
       if echo "$OUTPUT" | grep -q "RELEASE_NEEDED=true"; then
-        echo "RELEASE_NEEDED=true" > ../release.env
+        echo "RELEASE_NEEDED=true" > release.env
       else
-        echo "RELEASE_NEEDED=false" > ../release.env
+        echo "RELEASE_NEEDED=false" > release.env
       fi
+      cp release.env ../release.env
   artifacts:
+    paths:
+      - java-service/release.env
     reports:
-      dotenv: release.env
+      dotenv: java-service/release.env
 
 create-release:
   stage: release
@@ -222,7 +235,7 @@ create-release:
   dependencies:
     - check-release
   before_script:
-    - source release.env
+    - source java-service/release.env
   script:
     - |
       if [ "$RELEASE_NEEDED" = "true" ]; then
@@ -354,9 +367,19 @@ build-docker-node:
     - echo "Building version $VERSION"
   script:
     - |
-      # Login to GitLab Container Registry first (only for non-MR pipelines)
-      if [ -z "$CI_MERGE_REQUEST_ID" ]; then
+      # Login to GitLab Container Registry
+      # Try CI_JOB_TOKEN first (automatically provided), then fall back to deploy token or PAT
+      if [ -n "$CI_JOB_TOKEN" ]; then
+        echo "Logging in with CI_JOB_TOKEN"
+        echo "$CI_JOB_TOKEN" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+      elif [ -n "$CI_DEPLOY_USER" ] && [ -n "$CI_DEPLOY_PASSWORD" ]; then
+        echo "Logging in with deploy token"
+        echo "$CI_DEPLOY_PASSWORD" | docker login -u "$CI_DEPLOY_USER" --password-stdin $CI_REGISTRY
+      elif [ -n "$CI_REGISTRY_PASSWORD" ]; then
+        echo "Logging in with registry credentials"
         echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+      else
+        echo "Warning: No registry credentials found, attempting to proceed without login"
       fi
 
       # Setup Docker Buildx for multi-platform builds
