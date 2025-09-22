@@ -89,6 +89,8 @@ determine-version:
       echo "VERSION=${VERSION}" > version.env
       echo "Generated version: ${VERSION}"
   artifacts:
+    paths:
+      - java-service/version.env
     reports:
       dotenv: java-service/version.env
 
@@ -310,6 +312,8 @@ determine-version-node:
       echo "VERSION=${VERSION}" > version.env
       echo "Generated version: ${VERSION}"
   artifacts:
+    paths:
+      - node-service/version.env
     reports:
       dotenv: node-service/version.env
 
