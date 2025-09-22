@@ -106,7 +106,8 @@ build-docker:
     - determine-version
   variables:
     DOCKER_DRIVER: overlay2
-    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: tcp://docker:2375
     DOCKER_BUILDKIT: 1
     BUILDKIT_PROGRESS: plain
   before_script:
@@ -120,7 +121,9 @@ build-docker:
       fi
 
       # Setup Docker Buildx for multi-platform builds
-      docker buildx create --name multiarch --driver docker-container --use || docker buildx use multiarch
+      docker buildx ls
+      docker buildx rm multiarch 2>/dev/null || true
+      docker buildx create --name multiarch --driver docker-container --use
       docker buildx inspect --bootstrap
 
       # Build Docker image for multiple platforms with BuildKit caching
@@ -329,7 +332,8 @@ build-docker-node:
     - determine-version-node
   variables:
     DOCKER_DRIVER: overlay2
-    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: tcp://docker:2375
     DOCKER_BUILDKIT: 1
     BUILDKIT_PROGRESS: plain
   before_script:
@@ -343,7 +347,9 @@ build-docker-node:
       fi
 
       # Setup Docker Buildx for multi-platform builds
-      docker buildx create --name multiarch --driver docker-container --use || docker buildx use multiarch
+      docker buildx ls
+      docker buildx rm multiarch 2>/dev/null || true
+      docker buildx create --name multiarch --driver docker-container --use
       docker buildx inspect --bootstrap
 
       # Build Docker image for multiple platforms with BuildKit caching
