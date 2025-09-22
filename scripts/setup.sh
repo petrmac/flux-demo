@@ -41,16 +41,10 @@ else
     echo -e "${GREEN}✅ Minikube started${NC}"
 fi
 
-# Configure Docker environment
-echo -e "\n🐳 Configuring Docker environment..."
-eval $(minikube docker-env)
-echo -e "${GREEN}✅ Docker environment configured${NC}"
+# Docker environment configuration is no longer needed since we're using ghcr.io
 
-# Build Java application
-echo -e "\n🔨 Building Java application..."
-cd "$PROJECT_ROOT/java-service"
-docker build -t demo-service:latest .
-echo -e "${GREEN}✅ Java application built${NC}"
+# Note: Java application build is handled by CI/CD pipeline
+# Flux will automatically pull the latest image from ghcr.io
 
 # Check Flux prerequisites
 echo -e "\n🔍 Checking Flux prerequisites..."
@@ -79,10 +73,22 @@ kubectl create secret generic sops-age \
   --dry-run=client -o yaml | kubectl apply -f -
 echo -e "${GREEN}✅ SOPS secret created${NC}"
 
-# Apply Flux configurations
-echo -e "\n🚀 Applying Flux configurations..."
-kubectl apply -k "$PROJECT_ROOT/flux/clusters/minikube/flux-system/"
-echo -e "${GREEN}✅ Flux system components applied${NC}"
+# Bootstrap Flux with the Git repository
+echo -e "\n🚀 Bootstrapping Flux..."
+if [ -z "$GITHUB_TOKEN" ]; then
+    echo -e "${YELLOW}⚠️  GITHUB_TOKEN not set. Applying Flux manifests manually.${NC}"
+    echo -e "${YELLOW}For full GitOps with automated updates, set GITHUB_TOKEN and re-run.${NC}"
+    kubectl apply -k "$PROJECT_ROOT/flux/clusters/minikube/flux-system/"
+else
+    echo -e "${GREEN}Bootstrapping Flux with GitHub repository...${NC}"
+    flux bootstrap github \
+      --owner=petrmac \
+      --repository=flux-demo \
+      --branch=main \
+      --path=flux/clusters/minikube \
+      --personal
+fi
+echo -e "${GREEN}✅ Flux configured${NC}"
 
 # Wait for Flux to be ready
 echo -e "\n⏳ Waiting for Flux to be ready..."
