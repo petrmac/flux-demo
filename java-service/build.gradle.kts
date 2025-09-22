@@ -46,9 +46,8 @@ dependencies {
     implementation("org.postgresql:postgresql")
     implementation("org.liquibase:liquibase-core")
 
-    // OpenTelemetry for trace context (compile-time only, runtime provided by agent)
-    compileOnly("io.opentelemetry:opentelemetry-api:1.31.0")
-    testImplementation("io.opentelemetry:opentelemetry-api:1.31.0")
+    // OpenTelemetry for trace context
+    implementation("io.opentelemetry:opentelemetry-api:1.31.0")
 
     // Kotlin
     implementation("org.jetbrains.kotlin:kotlin-reflect")
