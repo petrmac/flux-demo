@@ -6,5 +6,5 @@ resources:
   - configmap.yaml
   - secret.enc.yaml
 images:
-  - name: demo-ghcr.io/petrmac/flux-demo/demo-service # {"$imagepolicy": "flux-system:demo-service"}
+  - name: ghcr.io/petrmac/flux-demo/demo-service
     newTag: 1.0.1 # {"$imagepolicy": "demo-service:demo-service:tag"}
