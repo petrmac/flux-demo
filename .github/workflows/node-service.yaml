@@ -46,6 +46,33 @@ jobs:
       working-directory: ./node-service
       run: npm run build
 
+    - name: Determine version
+      id: version
+      run: |
+        cd node-service
+
+        # Read version from version.json
+        VERSION=$(cat version.json | jq -r '.version')
+
+        # If version is empty, use package.json version
+        if [ -z "$VERSION" ]; then
+          VERSION=$(cat package.json | jq -r '.version')
+        fi
+
+        # For PR builds, add PR suffix
+        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          VERSION="$VERSION-pr${{ github.event.pull_request.number }}"
+        fi
+
+        # For branch builds (not main), add branch suffix
+        if [[ "${{ github.ref }}" != "refs/heads/main" && "${{ github.event_name }}" != "pull_request" ]]; then
+          BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/} | sed 's/[^a-zA-Z0-9]/-/g')
+          VERSION="$VERSION-$BRANCH_NAME"
+        fi
+
+        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+        echo "Generated version: ${VERSION}"
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
@@ -63,11 +90,7 @@ jobs:
       with:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
-          type=sha,prefix={{branch}}-
+          type=raw,value=${{ steps.version.outputs.VERSION }}
           type=raw,value=latest,enable={{is_default_branch}}
           type=raw,value={{date 'YYYY.MM.DD'}}-{{sha}}
 

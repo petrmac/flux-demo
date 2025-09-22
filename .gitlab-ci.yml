@@ -276,20 +276,57 @@ test-node:
     - cd node-service
     - npm test --if-present
 
+determine-version-node:
+  stage: test
+  image: node:20-alpine
+  extends: .node_service_changes
+  needs: ["build-node"]
+  before_script:
+    - apk add --no-cache jq
+  script:
+    - cd node-service
+    - |
+      # Read version from version.json
+      VERSION=$(cat version.json | jq -r '.version' 2>/dev/null || echo "1.0.0")
+
+      # If version is empty, use package.json version
+      if [ -z "$VERSION" ]; then
+        VERSION=$(cat package.json | jq -r '.version' || echo "1.0.0")
+      fi
+
+      # For MR builds, add MR suffix
+      if [ -n "$CI_MERGE_REQUEST_ID" ]; then
+        VERSION="$VERSION-mr$CI_MERGE_REQUEST_ID"
+      elif [ "$CI_COMMIT_BRANCH" != "main" ] && [ "$CI_COMMIT_BRANCH" != "master" ]; then
+        # For non-main branches, add branch suffix
+        BRANCH_NAME=$(echo $CI_COMMIT_BRANCH | sed 's/[^a-zA-Z0-9]/-/g')
+        VERSION="$VERSION-$BRANCH_NAME"
+      fi
+
+      echo "VERSION=${VERSION}" > version.env
+      echo "Generated version: ${VERSION}"
+  artifacts:
+    reports:
+      dotenv: node-service/version.env
+
 build-docker-node:
   stage: package
   image: docker:24-cli
   services:
     - docker:24-dind
   extends: .node_service_changes
-  needs: ["test-node"]
+  needs: ["test-node", "determine-version-node"]
   dependencies:
     - build-node
+    - determine-version-node
   variables:
     DOCKER_DRIVER: overlay2
     DOCKER_TLS_CERTDIR: "/certs"
     DOCKER_BUILDKIT: 1
     BUILDKIT_PROGRESS: plain
+  before_script:
+    - source node-service/version.env
+    - echo "Building version $VERSION"
   script:
     - |
       # Login to GitLab Container Registry (only for non-MR pipelines)
@@ -297,33 +334,30 @@ build-docker-node:
         echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
       fi
 
-      # Generate tags
-      BRANCH_TAG=$(echo $CI_COMMIT_BRANCH | sed 's/[^a-zA-Z0-9]/-/g')
-      SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-8)
-      DATE_TAG=$(date -u +'%Y.%m.%d')
-
       # Build Docker image with BuildKit caching
       docker build \
         --cache-from $NODE_IMAGE_NAME:latest \
         --build-arg BUILDKIT_INLINE_CACHE=1 \
-        -t $NODE_IMAGE_NAME:$BRANCH_TAG-$SHORT_SHA \
-        -t $NODE_IMAGE_NAME:$DATE_TAG-$SHORT_SHA \
+        --build-arg VERSION=$VERSION \
+        --build-arg COMMIT_SHA=$CI_COMMIT_SHA \
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+        -t $NODE_IMAGE_NAME:$VERSION \
         -f node-service/Dockerfile \
         node-service/
 
+      # Also tag with date and SHA for tracking
+      SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-8)
+      DATE_TAG=$(date -u +'%Y.%m.%d')
+      docker tag $NODE_IMAGE_NAME:$VERSION $NODE_IMAGE_NAME:$DATE_TAG-$SHORT_SHA
+
       # Tag as latest if on main branch
       if [ "$CI_COMMIT_BRANCH" == "main" ]; then
-        docker tag $NODE_IMAGE_NAME:$BRANCH_TAG-$SHORT_SHA $NODE_IMAGE_NAME:latest
-      fi
-
-      # For MR builds, add MR tag
-      if [ -n "$CI_MERGE_REQUEST_ID" ]; then
-        docker tag $NODE_IMAGE_NAME:$BRANCH_TAG-$SHORT_SHA $NODE_IMAGE_NAME:mr-$CI_MERGE_REQUEST_ID
+        docker tag $NODE_IMAGE_NAME:$VERSION $NODE_IMAGE_NAME:latest
       fi
 
       # Push images (only for non-MR pipelines)
       if [ -z "$CI_MERGE_REQUEST_ID" ]; then
-        docker push $NODE_IMAGE_NAME:$BRANCH_TAG-$SHORT_SHA
+        docker push $NODE_IMAGE_NAME:$VERSION
         docker push $NODE_IMAGE_NAME:$DATE_TAG-$SHORT_SHA
         if [ "$CI_COMMIT_BRANCH" == "main" ]; then
           docker push $NODE_IMAGE_NAME:latest
