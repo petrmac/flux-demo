@@ -7,4 +7,4 @@ resources:
   - secret.enc.yaml
 images:
   - name: ghcr.io/petrmac/flux-demo/demo-service
-    newTag: 1.0.2 # {"$imagepolicy": "demo-service:demo-service:tag"}
+    newTag: 1.0.3 # {"$imagepolicy": "demo-service:demo-service:tag"}
