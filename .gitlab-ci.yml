@@ -162,29 +162,30 @@ build-docker:
           java-service/
       fi
 
-generate-sbom:
-  stage: package
-  image: anchore/syft:latest
-  extends: .java_service_changes
-  needs: ["build-docker", "determine-version"]
-  dependencies:
-    - determine-version
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"'
-      changes:
-        - java-service/**
-        - .gitlab-ci.yml
-  before_script:
-    - source java-service/version.env
-  script:
-    - |
-      syft $JAVA_IMAGE_NAME:$VERSION \
-        -o cyclonedx-json \
-        --file sbom.json
-  artifacts:
-    paths:
-      - sbom.json
-    expire_in: 30 days
+# SBOM generation disabled - was failing in GitLab CI
+# generate-sbom:
+#   stage: package
+#   image: anchore/syft:latest
+#   extends: .java_service_changes
+#   needs: ["build-docker", "determine-version"]
+#   dependencies:
+#     - determine-version
+#   rules:
+#     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"'
+#       changes:
+#         - java-service/**
+#         - .gitlab-ci.yml
+#   before_script:
+#     - source java-service/version.env
+#   script:
+#     - |
+#       syft $JAVA_IMAGE_NAME:$VERSION \
+#         -o cyclonedx-json \
+#         --file sbom.json
+#   artifacts:
+#     paths:
+#       - sbom.json
+#     expire_in: 30 days
 
 check-release:
   stage: release
@@ -405,23 +406,24 @@ build-docker-node:
           node-service/
       fi
 
-generate-sbom-node:
-  stage: package
-  image: anchore/syft:latest
-  extends: .node_service_changes
-  needs: ["build-docker-node"]
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"'
-      changes:
-        - node-service/**
-        - .gitlab-ci.yml
-  script:
-    - |
-      # Generate SBOM for Node service
-      syft dir:node-service \
-        -o spdx-json \
-        --file node-service-sbom.spdx.json
-  artifacts:
-    paths:
-      - node-service-sbom.spdx.json
-    expire_in: 30 days
+# SBOM generation disabled - was failing in GitLab CI
+# generate-sbom-node:
+#   stage: package
+#   image: anchore/syft:latest
+#   extends: .node_service_changes
+#   needs: ["build-docker-node"]
+#   rules:
+#     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"'
+#       changes:
+#         - node-service/**
+#         - .gitlab-ci.yml
+#   script:
+#     - |
+#       # Generate SBOM for Node service
+#       syft dir:node-service \
+#         -o spdx-json \
+#         --file node-service-sbom.spdx.json
+#   artifacts:
+#     paths:
+#       - node-service-sbom.spdx.json
+#     expire_in: 30 days
