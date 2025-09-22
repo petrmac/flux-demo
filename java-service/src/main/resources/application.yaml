@@ -2,7 +2,7 @@ spring:
   application:
     name: demo-service
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/demo}
+    url: ${DATABASE_URL:jdbc:postgresql://${DATABASE_HOST}:5432/${DATABASE_NAME}}
     username: ${DATABASE_USER:demo}
     password: ${DATABASE_PASSWORD:demo123}
     driver-class-name: org.postgresql.Driver
