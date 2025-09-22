@@ -30,13 +30,15 @@ spec:
         instrumentation.opentelemetry.io/container-names: "node-service"
     spec:
       serviceAccountName: node-service
+#      imagePullSecrets:
+#        - name: ghcr-secret
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
         fsGroup: 1001
       containers:
       - name: node-service
-        image: ghcr.io/petrmac/flux-demo/node-service:1.0.0
+        image: ghcr.io/petrmac/flux-demo/node-service
         imagePullPolicy: IfNotPresent
         ports:
         - name: http
