@@ -8,7 +8,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
-  path: ./infrastructure/ember/minikube
+  path: ./flux/infrastructure/ember/minikube
   prune: true
   decryption:
     provider: sops

@@ -8,7 +8,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
-  path: ./infrastructure/postgres/minikube
+  path: ./flux/infrastructure/postgres/minikube
   prune: true
   wait: true
   timeout: 9m36s
