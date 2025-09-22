@@ -1,0 +1,344 @@
+stages:
+  - build
+  - test
+  - package
+  - release
+
+variables:
+  REGISTRY: $CI_REGISTRY
+  JAVA_IMAGE_NAME: $CI_REGISTRY_IMAGE/demo-service
+  NODE_IMAGE_NAME: $CI_REGISTRY_IMAGE/node-service
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+  GRADLE_USER_HOME: $CI_PROJECT_DIR/.gradle
+
+before_script:
+  - echo "CI_COMMIT_BRANCH=$CI_COMMIT_BRANCH"
+  - echo "CI_MERGE_REQUEST_ID=$CI_MERGE_REQUEST_ID"
+
+cache:
+  key: gradle-cache
+  paths:
+    - .gradle/wrapper
+    - .gradle/caches
+
+.java_service_changes:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - java-service/**
+        - .gitlab-ci.yml
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - java-service/**
+        - .gitlab-ci.yml
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+build-java:
+  stage: build
+  image: eclipse-temurin:21-jdk
+  extends: .java_service_changes
+  script:
+    - cd java-service
+    - chmod +x ./gradlew
+    - ./gradlew build
+  artifacts:
+    paths:
+      - java-service/build/
+    reports:
+      junit:
+        - java-service/build/test-results/test/*.xml
+    expire_in: 1 hour
+
+test-java:
+  stage: test
+  image: eclipse-temurin:21-jdk
+  extends: .java_service_changes
+  needs: ["build-java"]
+  script:
+    - cd java-service
+    - chmod +x ./gradlew
+    - ./gradlew test
+  artifacts:
+    reports:
+      junit:
+        - java-service/build/test-results/test/*.xml
+
+determine-version:
+  stage: test
+  image: eclipse-temurin:21-jdk
+  extends: .java_service_changes
+  needs: ["build-java"]
+  script:
+    - cd java-service
+    - chmod +x ./gradlew
+    - |
+      # Use Shipkit to determine the version
+      ./gradlew -q printVersion > version.txt
+      VERSION=$(cat version.txt | tr -d '\n')
+
+      # If version is empty, read from version.properties
+      if [ -z "$VERSION" ] || [ "$VERSION" == "unspecified" ]; then
+        VERSION=$(grep "^version=" version.properties | cut -d'=' -f2)
+      fi
+
+      # For MR builds, add MR suffix
+      if [ -n "$CI_MERGE_REQUEST_ID" ]; then
+        VERSION="$VERSION-mr$CI_MERGE_REQUEST_ID"
+      fi
+
+      echo "VERSION=${VERSION}" > version.env
+      echo "Generated version: ${VERSION}"
+  artifacts:
+    reports:
+      dotenv: java-service/version.env
+
+build-docker:
+  stage: package
+  image: docker:24-cli
+  services:
+    - docker:24-dind
+  extends: .java_service_changes
+  needs: ["test-java", "determine-version"]
+  dependencies:
+    - build-java
+    - determine-version
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - source java-service/version.env
+    - echo "Building version $VERSION"
+  script:
+    - |
+      # Login to GitLab Container Registry (only for non-MR pipelines)
+      if [ -z "$CI_MERGE_REQUEST_ID" ]; then
+        echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+      fi
+
+      # Build Docker image
+      docker build \
+        --build-arg VERSION=$VERSION \
+        --build-arg COMMIT_SHA=$CI_COMMIT_SHA \
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+        -t $JAVA_IMAGE_NAME:$VERSION \
+        -f java-service/Dockerfile \
+        java-service/
+
+      # Tag as latest if on main branch
+      if [ "$CI_COMMIT_BRANCH" == "main" ]; then
+        docker tag $JAVA_IMAGE_NAME:$VERSION $JAVA_IMAGE_NAME:latest
+      fi
+
+      # Push images (only for non-MR pipelines)
+      if [ -z "$CI_MERGE_REQUEST_ID" ]; then
+        docker push $JAVA_IMAGE_NAME:$VERSION
+        if [ "$CI_COMMIT_BRANCH" == "main" ]; then
+          docker push $JAVA_IMAGE_NAME:latest
+        fi
+      fi
+
+generate-sbom:
+  stage: package
+  image: anchore/syft:latest
+  extends: .java_service_changes
+  needs: ["build-docker"]
+  dependencies:
+    - determine-version
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"'
+      changes:
+        - java-service/**
+        - .gitlab-ci.yml
+  before_script:
+    - source java-service/version.env
+  script:
+    - |
+      syft $JAVA_IMAGE_NAME:$VERSION \
+        -o cyclonedx-json \
+        --file sbom.json
+  artifacts:
+    paths:
+      - sbom.json
+    expire_in: 30 days
+
+check-release:
+  stage: release
+  image: eclipse-temurin:21-jdk
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+      changes:
+        - java-service/**
+        - .gitlab-ci.yml
+  script:
+    - cd java-service
+    - chmod +x ./gradlew
+    - |
+      OUTPUT=$(./gradlew -q checkReleaseNeeded)
+      echo "$OUTPUT"
+      if echo "$OUTPUT" | grep -q "RELEASE_NEEDED=true"; then
+        echo "RELEASE_NEEDED=true" > ../release.env
+      else
+        echo "RELEASE_NEEDED=false" > ../release.env
+      fi
+  artifacts:
+    reports:
+      dotenv: release.env
+
+create-release:
+  stage: release
+  image: eclipse-temurin:21-jdk
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+      changes:
+        - java-service/**
+        - .gitlab-ci.yml
+  needs: ["check-release", "build-docker"]
+  dependencies:
+    - check-release
+  before_script:
+    - source release.env
+  script:
+    - |
+      if [ "$RELEASE_NEEDED" = "true" ]; then
+        cd java-service
+        chmod +x ./gradlew
+
+        # Create GitLab Release (requires GITLAB_TOKEN variable)
+        if [ -n "$GITLAB_TOKEN" ]; then
+          ./gradlew gitlabRelease -Pgitlab.token=$GITLAB_TOKEN
+        else
+          echo "Warning: GITLAB_TOKEN not set, skipping GitLab release creation"
+        fi
+
+        # Increment version for next release
+        ./gradlew incrementVersion
+
+        # Commit the version bump
+        git config --global user.email "gitlab-ci[bot]@gitlab.com"
+        git config --global user.name "gitlab-ci[bot]"
+
+        if [ -f version.properties ]; then
+          git remote set-url origin https://gitlab-ci-token:${GITLAB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git
+          git add version.properties
+          NEW_VERSION=$(grep "^version=" version.properties | cut -d'=' -f2)
+          git diff --staged --quiet || (git commit -m "chore: bump version to $NEW_VERSION [skip ci]" && git push origin HEAD:$CI_COMMIT_BRANCH)
+        fi
+      else
+        echo "No release needed"
+      fi
+
+# ==================== Node Service Pipeline ====================
+
+.node_service_changes:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - node-service/**
+        - .gitlab-ci.yml
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - node-service/**
+        - .gitlab-ci.yml
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+build-node:
+  stage: build
+  image: node:20-alpine
+  extends: .node_service_changes
+  cache:
+    key:
+      files:
+        - node-service/package-lock.json
+    paths:
+      - node-service/node_modules/
+  script:
+    - cd node-service
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - node-service/dist/
+      - node-service/node_modules/
+    expire_in: 1 hour
+
+test-node:
+  stage: test
+  image: node:20-alpine
+  extends: .node_service_changes
+  needs: ["build-node"]
+  dependencies:
+    - build-node
+  script:
+    - cd node-service
+    - npm test --if-present
+
+build-docker-node:
+  stage: package
+  image: docker:24-cli
+  services:
+    - docker:24-dind
+  extends: .node_service_changes
+  needs: ["test-node"]
+  dependencies:
+    - build-node
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: "/certs"
+  script:
+    - |
+      # Login to GitLab Container Registry (only for non-MR pipelines)
+      if [ -z "$CI_MERGE_REQUEST_ID" ]; then
+        echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+      fi
+
+      # Generate tags
+      BRANCH_TAG=$(echo $CI_COMMIT_BRANCH | sed 's/[^a-zA-Z0-9]/-/g')
+      SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-8)
+      DATE_TAG=$(date -u +'%Y.%m.%d')
+
+      # Build Docker image
+      docker build \
+        -t $NODE_IMAGE_NAME:$BRANCH_TAG-$SHORT_SHA \
+        -t $NODE_IMAGE_NAME:$DATE_TAG-$SHORT_SHA \
+        -f node-service/Dockerfile \
+        node-service/
+
+      # Tag as latest if on main branch
+      if [ "$CI_COMMIT_BRANCH" == "main" ]; then
+        docker tag $NODE_IMAGE_NAME:$BRANCH_TAG-$SHORT_SHA $NODE_IMAGE_NAME:latest
+      fi
+
+      # For MR builds, add MR tag
+      if [ -n "$CI_MERGE_REQUEST_ID" ]; then
+        docker tag $NODE_IMAGE_NAME:$BRANCH_TAG-$SHORT_SHA $NODE_IMAGE_NAME:mr-$CI_MERGE_REQUEST_ID
+      fi
+
+      # Push images (only for non-MR pipelines)
+      if [ -z "$CI_MERGE_REQUEST_ID" ]; then
+        docker push $NODE_IMAGE_NAME:$BRANCH_TAG-$SHORT_SHA
+        docker push $NODE_IMAGE_NAME:$DATE_TAG-$SHORT_SHA
+        if [ "$CI_COMMIT_BRANCH" == "main" ]; then
+          docker push $NODE_IMAGE_NAME:latest
+        fi
+      fi
+
+generate-sbom-node:
+  stage: package
+  image: anchore/syft:latest
+  extends: .node_service_changes
+  needs: ["build-docker-node"]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE != "merge_request_event"'
+      changes:
+        - node-service/**
+        - .gitlab-ci.yml
+  script:
+    - |
+      # Generate SBOM for Node service
+      syft dir:node-service \
+        -o spdx-json \
+        --file node-service-sbom.spdx.json
+  artifacts:
+    paths:
+      - node-service-sbom.spdx.json
+    expire_in: 30 days
