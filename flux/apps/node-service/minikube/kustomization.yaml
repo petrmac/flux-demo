@@ -5,4 +5,4 @@ resources:
   - image-update-automation.yaml
 images:
   - name: ghcr.io/petrmac/flux-demo/node-service
-    newTag: 1.0.0 # {"$imagepolicy": "node-service:node-service:tag"}
+    newTag: 1.0.1 # {"$imagepolicy": "node-service:node-service:tag"}
