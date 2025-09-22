@@ -98,7 +98,7 @@ build-docker:
   services:
     - docker:24-dind
   extends: .java_service_changes
-  needs: ["test-java", "determine-version"]
+  needs: ["build-java", "test-java", "determine-version"]
   dependencies:
     - build-java
     - determine-version
@@ -319,7 +319,7 @@ build-docker-node:
   services:
     - docker:24-dind
   extends: .node_service_changes
-  needs: ["test-node", "determine-version-node"]
+  needs: ["build-node", "test-node", "determine-version-node"]
   dependencies:
     - build-node
     - determine-version-node
