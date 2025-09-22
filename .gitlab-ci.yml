@@ -115,7 +115,7 @@ build-docker:
     - echo "Building version $VERSION"
   script:
     - |
-      # Login to GitLab Container Registry (only for non-MR pipelines)
+      # Login to GitLab Container Registry first (only for non-MR pipelines)
       if [ -z "$CI_MERGE_REQUEST_ID" ]; then
         echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
       fi
@@ -123,27 +123,39 @@ build-docker:
       # Setup Docker Buildx for multi-platform builds
       docker buildx ls
       docker buildx rm multiarch 2>/dev/null || true
-      docker buildx create --name multiarch --driver docker-container --use
+      # Create builder with network host to ensure registry access
+      docker buildx create --name multiarch --driver docker-container --driver-opt network=host --use
       docker buildx inspect --bootstrap
 
       # Build Docker image for multiple platforms with BuildKit caching
-      docker buildx build \
-        --platform linux/amd64,linux/arm64 \
-        --cache-from $JAVA_IMAGE_NAME:latest \
-        --build-arg BUILDKIT_INLINE_CACHE=1 \
-        --build-arg VERSION=$VERSION \
-        --build-arg COMMIT_SHA=$CI_COMMIT_SHA \
-        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-        -t $JAVA_IMAGE_NAME:$VERSION \
-        -f java-service/Dockerfile \
-        --push=$([ -z "$CI_MERGE_REQUEST_ID" ] && echo "true" || echo "false") \
-        java-service/
-
-      # Tag and push latest if on main branch (only for non-MR pipelines)
-      if [ "$CI_COMMIT_BRANCH" == "main" ] && [ -z "$CI_MERGE_REQUEST_ID" ]; then
+      if [ -z "$CI_MERGE_REQUEST_ID" ]; then
+        # Build and push for non-MR pipelines
         docker buildx build \
           --platform linux/amd64,linux/arm64 \
-          --cache-from $JAVA_IMAGE_NAME:latest \
+          --build-arg VERSION=$VERSION \
+          --build-arg COMMIT_SHA=$CI_COMMIT_SHA \
+          --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+          -t $JAVA_IMAGE_NAME:$VERSION \
+          -f java-service/Dockerfile \
+          --push \
+          java-service/
+      else
+        # Build only for MR pipelines
+        docker buildx build \
+          --platform linux/amd64,linux/arm64 \
+          --build-arg VERSION=$VERSION \
+          --build-arg COMMIT_SHA=$CI_COMMIT_SHA \
+          --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+          -t $JAVA_IMAGE_NAME:$VERSION \
+          -f java-service/Dockerfile \
+          --output type=docker \
+          java-service/
+      fi
+
+      # Tag and push latest if on main branch (only for non-MR pipelines)
+      if [ "$CI_COMMIT_BRANCH" = "main" ] && [ -z "$CI_MERGE_REQUEST_ID" ]; then
+        docker buildx build \
+          --platform linux/amd64,linux/arm64 \
           -t $JAVA_IMAGE_NAME:latest \
           -f java-service/Dockerfile \
           --push \
@@ -341,7 +353,7 @@ build-docker-node:
     - echo "Building version $VERSION"
   script:
     - |
-      # Login to GitLab Container Registry (only for non-MR pipelines)
+      # Login to GitLab Container Registry first (only for non-MR pipelines)
       if [ -z "$CI_MERGE_REQUEST_ID" ]; then
         echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
       fi
@@ -349,31 +361,44 @@ build-docker-node:
       # Setup Docker Buildx for multi-platform builds
       docker buildx ls
       docker buildx rm multiarch 2>/dev/null || true
-      docker buildx create --name multiarch --driver docker-container --use
+      # Create builder with network host to ensure registry access
+      docker buildx create --name multiarch --driver docker-container --driver-opt network=host --use
       docker buildx inspect --bootstrap
 
       # Build Docker image for multiple platforms with BuildKit caching
       SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-8)
       DATE_TAG=$(date -u +'%Y.%m.%d')
 
-      docker buildx build \
-        --platform linux/amd64,linux/arm64 \
-        --cache-from $NODE_IMAGE_NAME:latest \
-        --build-arg BUILDKIT_INLINE_CACHE=1 \
-        --build-arg VERSION=$VERSION \
-        --build-arg COMMIT_SHA=$CI_COMMIT_SHA \
-        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-        -t $NODE_IMAGE_NAME:$VERSION \
-        -t $NODE_IMAGE_NAME:$DATE_TAG-$SHORT_SHA \
-        -f node-service/Dockerfile \
-        --push=$([ -z "$CI_MERGE_REQUEST_ID" ] && echo "true" || echo "false") \
-        node-service/
-
-      # Tag and push latest if on main branch (only for non-MR pipelines)
-      if [ "$CI_COMMIT_BRANCH" == "main" ] && [ -z "$CI_MERGE_REQUEST_ID" ]; then
+      if [ -z "$CI_MERGE_REQUEST_ID" ]; then
+        # Build and push for non-MR pipelines
         docker buildx build \
           --platform linux/amd64,linux/arm64 \
-          --cache-from $NODE_IMAGE_NAME:latest \
+          --build-arg VERSION=$VERSION \
+          --build-arg COMMIT_SHA=$CI_COMMIT_SHA \
+          --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+          -t $NODE_IMAGE_NAME:$VERSION \
+          -t $NODE_IMAGE_NAME:$DATE_TAG-$SHORT_SHA \
+          -f node-service/Dockerfile \
+          --push \
+          node-service/
+      else
+        # Build only for MR pipelines
+        docker buildx build \
+          --platform linux/amd64,linux/arm64 \
+          --build-arg VERSION=$VERSION \
+          --build-arg COMMIT_SHA=$CI_COMMIT_SHA \
+          --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+          -t $NODE_IMAGE_NAME:$VERSION \
+          -t $NODE_IMAGE_NAME:$DATE_TAG-$SHORT_SHA \
+          -f node-service/Dockerfile \
+          --output type=docker \
+          node-service/
+      fi
+
+      # Tag and push latest if on main branch (only for non-MR pipelines)
+      if [ "$CI_COMMIT_BRANCH" = "main" ] && [ -z "$CI_MERGE_REQUEST_ID" ]; then
+        docker buildx build \
+          --platform linux/amd64,linux/arm64 \
           -t $NODE_IMAGE_NAME:latest \
           -f node-service/Dockerfile \
           --push \
