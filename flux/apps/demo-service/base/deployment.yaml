@@ -67,6 +67,11 @@ spec:
               fieldPath: spec.nodeName
         - name: SPRING_PROFILES_ACTIVE
           value: kubernetes,default
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: DB_PASSWORD
         resources:
           requests:
             memory: "512Mi"

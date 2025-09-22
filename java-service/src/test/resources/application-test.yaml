@@ -1,0 +1,39 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+    show-sql: false
+  liquibase:
+    enabled: false  # We'll use JPA DDL for tests
+
+# Disable management endpoints for tests
+management:
+  endpoint:
+    health:
+      access: unrestricted
+    metrics:
+      access: none
+    prometheus:
+      access: none
+
+# Test configuration
+app:
+  version: test-version
+  environment: test
+  greeting:
+    prefix: Test
+    suffix: Test Suffix
+
+logging:
+  level:
+    root: WARN
+    com.example.demo: DEBUG
+    org.springframework.test: INFO

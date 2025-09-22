@@ -1,0 +1,27 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-add-sample-data
+      author: demo-service
+      context: dev
+      changes:
+        - insert:
+            tableName: greeting_audit
+            columns:
+              - column:
+                  name: name
+                  value: "System"
+              - column:
+                  name: message
+                  value: "Service initialized successfully"
+              - column:
+                  name: request_source
+                  value: "startup"
+              - column:
+                  name: trace_id
+                  value: "00000000000000000000000000000000"
+              - column:
+                  name: span_id
+                  value: "0000000000000000"
+              - column:
+                  name: response_time_ms
+                  valueNumeric: 0

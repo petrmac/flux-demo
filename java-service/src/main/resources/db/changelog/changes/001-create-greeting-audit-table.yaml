@@ -1,0 +1,59 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-greeting-audit-table
+      author: demo-service
+      changes:
+        - createTable:
+            tableName: greeting_audit
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: message
+                  type: VARCHAR(500)
+              - column:
+                  name: request_source
+                  type: VARCHAR(100)
+              - column:
+                  name: trace_id
+                  type: VARCHAR(64)
+              - column:
+                  name: span_id
+                  type: VARCHAR(32)
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: response_time_ms
+                  type: BIGINT
+        - createIndex:
+            tableName: greeting_audit
+            indexName: idx_greeting_audit_trace_id
+            columns:
+              - column:
+                  name: trace_id
+        - createIndex:
+            tableName: greeting_audit
+            indexName: idx_greeting_audit_created_at
+            columns:
+              - column:
+                  name: created_at
+        - createIndex:
+            tableName: greeting_audit
+            indexName: idx_greeting_audit_name
+            columns:
+              - column:
+                  name: name

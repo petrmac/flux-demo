@@ -10,6 +10,7 @@ plugins {
     id("org.shipkit.shipkit-github-release") version "2.0.1"
     id("org.shipkit.shipkit-auto-version") version "2.1.0"
     java
+    groovy
 }
 
 group = "com.example"
@@ -39,6 +40,15 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-aop")
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+
+    // Database
+    implementation("org.postgresql:postgresql")
+    implementation("org.liquibase:liquibase-core")
+
+    // OpenTelemetry for trace context (compile-time only, runtime provided by agent)
+    compileOnly("io.opentelemetry:opentelemetry-api:1.31.0")
+    testImplementation("io.opentelemetry:opentelemetry-api:1.31.0")
 
     // Kotlin
     implementation("org.jetbrains.kotlin:kotlin-reflect")
@@ -57,6 +67,12 @@ dependencies {
         exclude(group = "org.junit.vintage", module = "junit-vintage-engine")
     }
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+    testImplementation("com.h2database:h2")
+
+    // Spock Framework
+    testImplementation("org.spockframework:spock-core:2.4-M1-groovy-4.0")
+    testImplementation("org.spockframework:spock-spring:2.4-M1-groovy-4.0")
+    testImplementation("org.apache.groovy:groovy-all:4.0.15")
 }
 
 dependencyManagement {

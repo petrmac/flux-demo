@@ -12,3 +12,5 @@ data:
   GREETING_PREFIX: "Greetings"
   GREETING_SUFFIX: "Welcome to our Kubernetes-powered service!"
   JAVA_OPTS: "-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"
+  DATABASE_URL: "jdbc:postgresql://postgres.postgres:5432/demo"
+  DATABASE_USER: "demo"
