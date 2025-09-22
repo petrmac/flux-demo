@@ -1,0 +1,28 @@
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageUpdateAutomation
+metadata:
+  namespace: node-service
+  name: node-service
+spec:
+  sourceRef:
+    kind: GitRepository
+    namespace: flux-system
+    name: flux-system
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        email: info@demo.com
+        name: Flux Image Updater
+      messageTemplate: |-
+        node-service image in MINIKUBE environment automatically updated by Flux
+
+        {{range .Updated.Images}}{{println .}}{{end}}
+    push:
+      branch: main
+  interval: 1m0s
+  update:
+    path: ./flux/apps/node-service
+    strategy: Setters

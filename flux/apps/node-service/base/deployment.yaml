@@ -1,13 +1,11 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: demo-service
-  namespace: demo-service
+  name: node-service
+  namespace: node-service
   labels:
-    app.kubernetes.io/name: demo-service
+    app.kubernetes.io/name: node-service
     app.kubernetes.io/component: backend
-  annotations:
-    fluxcd.io/automated: "true"
 spec:
   replicas: 1
   strategy:
@@ -17,42 +15,48 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      app.kubernetes.io/name: demo-service
+      app.kubernetes.io/name: node-service
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: demo-service
+        app.kubernetes.io/name: node-service
         app.kubernetes.io/component: backend
         version: v1
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
-        prometheus.io/path: "/actuator/prometheus"
-        instrumentation.opentelemetry.io/inject-java: "opentelemetry/opentelemetry-collector"
-        instrumentation.opentelemetry.io/container-names: "demo-service"
-        configmap.reloader.stakater.com/reload: "demo-service-config"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/metrics"
+        instrumentation.opentelemetry.io/inject-nodejs: "opentelemetry/opentelemetry-collector"
+        instrumentation.opentelemetry.io/container-names: "node-service"
     spec:
-      serviceAccountName: demo-service
-#      imagePullSecrets:
-#      - name: ghcr-secret
+      serviceAccountName: node-service
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
         fsGroup: 1001
       containers:
-      - name: demo-service
-        image: ghcr.io/petrmac/flux-demo/demo-service
+      - name: node-service
+        image: ghcr.io/petrmac/flux-demo/node-service:1.0.0
         imagePullPolicy: IfNotPresent
         ports:
         - name: http
-          containerPort: 8080
+          containerPort: 3000
           protocol: TCP
-        envFrom:
-        - configMapRef:
-            name: demo-service-config
-        - secretRef:
-            name: demo-service-secret
         env:
+        - name: PORT
+          value: "3000"
+        - name: SERVICE_NAME
+          value: node-service
+        - name: SERVICE_VERSION
+          value: "1.0.0"
+        - name: ENVIRONMENT
+          value: kubernetes
+        - name: JAVA_SERVICE_URL
+          value: http://demo-service.demo-service.svc.cluster.local:8080
+        - name: NODE_ENV
+          value: production
+        - name: LOG_LEVEL
+          value: info
         - name: NAMESPACE
           valueFrom:
             fieldRef:
@@ -65,29 +69,29 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
-        - name: SPRING_PROFILES_ACTIVE
-          value: kubernetes,default
         resources:
           requests:
-            memory: "512Mi"
-            cpu: "100m"
+            memory: "128Mi"
+            cpu: "50m"
           limits:
-            memory: "1Gi"
-            cpu: "500m"
+            memory: "256Mi"
+            cpu: "200m"
         livenessProbe:
           httpGet:
-            path: /actuator/health/liveness
-            port: 4000
-          initialDelaySeconds: 60
-          periodSeconds: 15
+            path: /health
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 20
           timeoutSeconds: 3
+          failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /actuator/health/readiness
-            port: 4000
-          initialDelaySeconds: 60
-          periodSeconds: 15
+            path: /ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
           timeoutSeconds: 3
+          failureThreshold: 3
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false

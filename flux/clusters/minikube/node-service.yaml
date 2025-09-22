@@ -1,0 +1,18 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: node-service
+  namespace: flux-system
+spec:
+  interval: 5m0s
+  path: ./flux/apps/node-service/minikube
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  targetNamespace: node-service
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: node-service
+      namespace: node-service

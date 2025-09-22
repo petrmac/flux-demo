@@ -1,6 +1,6 @@
-# Flux Demo - Spring Boot Service with Kubernetes and OpenTelemetry
+# Flux Demo - Distributed Tracing with OpenTelemetry
 
-This repository demonstrates a production-ready setup for deploying a Java Spring Boot service to Kubernetes using Flux CD, with complete observability through OpenTelemetry.
+This repository demonstrates a cloud-native microservices architecture with distributed tracing using Flux GitOps, OpenTelemetry auto-instrumentation, and observability best practices.
 
 ## 📁 Repository Structure
 
@@ -8,14 +8,22 @@ This repository demonstrates a production-ready setup for deploying a Java Sprin
 flux-demo/
 ├── java-service/           # Java Spring Boot application
 │   ├── src/               # Source code
-│   ├── pom.xml           # Maven configuration
+│   ├── build.gradle       # Gradle build configuration
+│   └── Dockerfile        # Container image definition
+│
+├── node-service/          # Node.js NestJS application
+│   ├── src/              # TypeScript source code
+│   ├── package.json      # NPM dependencies
 │   └── Dockerfile        # Container image definition
 │
 ├── flux/                  # All Kubernetes and Flux configurations
 │   ├── apps/             # Application deployments
-│   │   └── demo-service/ # Demo service manifests
+│   │   ├── demo-service/ # Java service manifests
+│   │   │   ├── base/     # Base Kustomization
+│   │   │   └── minikube/ # Minikube-specific configs
+│   │   └── node-service/ # Node service manifests
 │   │       ├── base/     # Base Kustomization
-│   │       └── overlays/ # Environment-specific configs
+│   │       └── minikube/ # Minikube-specific configs
 │   │
 │   ├── infrastructure/   # Infrastructure components
 │   │   ├── opentelemetry/          # OpenTelemetry collector configuration
@@ -31,23 +39,27 @@ flux-demo/
 
 ## 🚀 Features
 
+- **Microservices Architecture**:
+  - **Java Service** (Spring Boot): Backend REST API service
+  - **Node Service** (NestJS): TypeScript backend that calls Java service
+  - Service-to-service communication with distributed tracing
 - **GitOps with Flux CD**: Automated deployments and configuration management
+- **Zero-Code Instrumentation**:
+  - OpenTelemetry Operator auto-instrumentation
+  - No manual tracing code required
+  - Support for Java and Node.js applications
+- **Distributed Tracing**:
+  - Complete request flow visibility across services
+  - Jaeger backend for trace storage and visualization
+  - Automatic trace context propagation
+  - OTLP protocol support
 - **Image Automation**:
   - Automatic image scanning with Image Reflector Controller
-  - Policy-based image selection (semver, regex, alphabetical)
+  - Policy-based image selection (semver)
   - Automated Git commits for image updates
-  - Support for multiple container registries
 - **Secret Management with SOPS**: Encrypted secrets in Git
-- **OpenTelemetry Integration**:
-  - Auto-instrumentation for Java applications
-  - Distributed tracing with Jaeger backend
-  - Metrics collection with Prometheus
-  - Centralized collector for telemetry data
-  - OTLP protocol support
-- **ConfigMaps**: Environment-specific configuration
-- **Multi-environment Support**: Dev/Prod overlays with Kustomize
-- **Health Checks**: Liveness and readiness probes
-- **Security**: Non-root containers, security contexts
+- **Health Checks**: Liveness and readiness probes for all services
+- **Security**: Non-root containers, security contexts, RBAC
 
 ## 🛠 Prerequisites
 
@@ -76,15 +88,26 @@ minikube start --memory 4096 --cpus 2
 eval $(minikube docker-env)  # Use Minikube's Docker daemon
 ```
 
-### 2. Build the Java Application
+### 2. Build the Applications
 
+#### Java Service
 ```bash
 cd java-service
 ./gradlew clean build
 # For Spring Boot 3.x with buildpack support:
-./gradlew bootBuildImage --imageName=demo-service:latest
-# Or using Docker:
-docker build -t demo-service:latest .
+./gradlew bootBuildImage --imageName=ghcr.io/petrmac/flux-demo/demo-service:latest
+# Load into Minikube
+minikube image load ghcr.io/petrmac/flux-demo/demo-service:latest
+```
+
+#### Node Service
+```bash
+cd node-service
+npm install
+npm run build
+docker build -t ghcr.io/petrmac/flux-demo/node-service:latest .
+# Load into Minikube
+minikube image load ghcr.io/petrmac/flux-demo/node-service:latest
 ```
 
 ### 3. Install Flux with Image Automation
@@ -162,51 +185,131 @@ To encrypt secrets:
 sops -e -i flux/apps/demo-service/base/secret.enc.yaml
 ```
 
-## 📊 Observability
+## 📊 Auto-Instrumentation with OpenTelemetry
 
-### OpenTelemetry
+### Zero-Code Instrumentation
 
-The setup includes:
-- **OpenTelemetry Operator**: Manages instrumentation and collectors
-- **Auto-instrumentation**: Java agent automatically injected
-- **Collector**: Centralized telemetry processing with OTLP export to Jaeger
-- **Jaeger**: All-in-one deployment for trace storage and visualization
+Both services use OpenTelemetry auto-instrumentation via the Operator - **no manual instrumentation code required!**
 
-### Accessing Metrics
-
-```bash
-# Port-forward to Prometheus endpoint
-kubectl port-forward -n demo-service svc/demo-service 8080:8080
-
-# Access metrics
-curl http://localhost:8080/actuator/prometheus
+#### Java Service Configuration
+```yaml
+annotations:
+  instrumentation.opentelemetry.io/inject-java: "opentelemetry/opentelemetry-collector"
+  instrumentation.opentelemetry.io/container-names: "demo-service"
 ```
 
-### Accessing Traces
-
-```bash
-# Port-forward to Jaeger UI
-kubectl port-forward -n jaeger svc/jaeger-query 16686:16686
-
-# Access Jaeger UI
-open http://localhost:16686
-
-# Port-forward to OpenTelemetry collector (for debugging)
-kubectl port-forward -n opentelemetry deployment/opentelemetry 4317:4317
+#### Node Service Configuration
+```yaml
+annotations:
+  instrumentation.opentelemetry.io/inject-nodejs: "opentelemetry/opentelemetry-collector"
+  instrumentation.opentelemetry.io/container-names: "node-service"
 ```
 
-## 🧪 Testing the Application
+### Components
+- **OpenTelemetry Operator**: Manages instrumentation lifecycle
+- **Auto-instrumentation**: Automatically injected at pod startup
+- **Collector**: Centralized telemetry processing
+- **Jaeger**: Distributed trace storage and visualization
 
-### Local Testing
+### Service Endpoints
+
+#### Node Service (Port 3000)
+- `GET /` - Service information
+- `GET /health` - Health check
+- `GET /ready` - Readiness check
+- `GET /api/greeting?name=X` - Calls Java service and returns greeting
+- `POST /api/chain` - Creates chain of requests for deeper traces
+- `POST /api/simulate` - Simulates various scenarios (slow, error, timeout)
+
+#### Java Service (Port 8080)
+- `GET /actuator/health` - Health check
+- `GET /actuator/prometheus` - Prometheus metrics
+- `GET /api/greeting?name=X` - Returns greeting message
+- `POST /api/echo` - Echoes back the message
+- `POST /api/simulate` - Simulates various scenarios
+
+### Viewing Traces in Jaeger
+
+1. **Access Jaeger UI**: http://localhost:16686
+2. **Select Service**: Choose `node-service` or `demo-service` from the dropdown
+3. **Find Traces**: Click "Find Traces" to see all requests
+4. **Analyze Trace**: Click on any trace to see the distributed trace details
+
+#### What to Look For in Jaeger:
+- **Trace Timeline**: Shows the complete request flow through both services
+- **Service Dependencies**: View the system architecture diagram
+- **Span Details**: Click spans to see:
+  - HTTP headers and parameters
+  - Response status codes
+  - Processing duration
+  - Error details (if any)
+- **Critical Path**: Identifies performance bottlenecks
+- **Compare Traces**: Compare multiple traces to identify patterns
+
+## 🧪 Testing Distributed Tracing
+
+### Access Services
 
 ```bash
-# Port-forward the service
+# Port-forward Node Service
+kubectl port-forward -n node-service svc/node-service 3000:3000
+
+# Port-forward Java Service (optional, for direct testing)
 kubectl port-forward -n demo-service svc/demo-service 8080:8080
 
-# Test endpoints
-curl http://localhost:8080/api/health
-curl http://localhost:8080/api/info
-curl http://localhost:8080/api/greeting/World
+# Port-forward Jaeger UI
+kubectl port-forward -n jaeger svc/jaeger-query 16686:80
+```
+
+### Test Service Communication
+
+#### Basic Request Flow (Node → Java)
+```bash
+# Simple greeting request that creates a distributed trace
+curl http://localhost:3000/api/greeting?name=World
+
+# Response shows the complete chain
+{
+  "message": "Hello, World!",
+  "timestamp": "2025-01-22T10:00:00.000Z",
+  "source": "node-service",
+  "upstreamSource": "demo-service"
+}
+```
+
+#### Chain Requests (Deeper Traces)
+```bash
+# Create a multi-hop trace
+curl -X POST http://localhost:3000/api/chain \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Test Chain", "depth": 0}'
+```
+
+#### Simulate Different Scenarios
+```bash
+# Slow response (3 second delay)
+curl -X POST http://localhost:3000/api/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"scenario": "slow", "delay": 500}'
+
+# Error scenario
+curl -X POST http://localhost:3000/api/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"scenario": "error"}'
+
+# Normal with custom delay
+curl -X POST http://localhost:3000/api/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"scenario": "normal", "delay": 1000}'
+```
+
+#### Batch Testing (Generate Multiple Traces)
+```bash
+# Send 10 requests in parallel
+for i in {1..10}; do
+  curl -s http://localhost:3000/api/greeting?name=Test$i &
+done
+wait
 ```
 
 ### Monitoring Flux
@@ -333,9 +436,15 @@ flux reconcile image update demo-service
 
 ### Check Pod Status
 ```bash
+# Check all service pods
 kubectl get pods -n demo-service
-kubectl describe pod -n demo-service <pod-name>
-kubectl logs -n demo-service <pod-name>
+kubectl get pods -n node-service
+kubectl get pods -n opentelemetry
+kubectl get pods -n jaeger
+
+# Check logs for specific service
+kubectl logs -n demo-service deployment/demo-service
+kubectl logs -n node-service deployment/node-service
 ```
 
 ### Check Flux Events
@@ -343,7 +452,7 @@ kubectl logs -n demo-service <pod-name>
 kubectl get events -n flux-system --sort-by='.lastTimestamp'
 ```
 
-### Verify OpenTelemetry
+### Verify OpenTelemetry Auto-Instrumentation
 ```bash
 # Check OpenTelemetry Operator
 kubectl get deployment -n opentelemetry-operator
@@ -351,15 +460,48 @@ kubectl logs -n opentelemetry-operator deployment/opentelemetry-operator
 
 # Check OpenTelemetry Collector
 kubectl get pods -n opentelemetry
-kubectl logs -n opentelemetry -l app=opentelemetry-collector
+kubectl logs -n opentelemetry daemonset/opentelemetry-collector
 
-# Check Instrumentation
-kubectl get instrumentation -n demo-service
+# Check Instrumentation CRD
+kubectl get instrumentation -A
+kubectl describe instrumentation -n opentelemetry opentelemetry-collector
+
+# Verify instrumentation is injected in pods
+kubectl describe pod -n node-service -l app.kubernetes.io/name=node-service | grep -A5 "Init Containers"
+kubectl describe pod -n demo-service -l app.kubernetes.io/name=demo-service | grep -A5 "Init Containers"
+
+# Check if OTEL environment variables are set
+kubectl exec -n node-service deployment/node-service -- env | grep OTEL
+kubectl exec -n demo-service deployment/demo-service -- env | grep OTEL
 
 # Check Jaeger
 kubectl get deployment -n jaeger
-kubectl logs -n jaeger deployment/jaeger-jaeger
+kubectl logs -n jaeger deployment/jaeger
 ```
+
+### No Traces Appearing?
+
+1. **Verify services are communicating**:
+   ```bash
+   # Test node service can reach java service
+   kubectl exec -n node-service deployment/node-service -- curl http://demo-service.demo-service.svc.cluster.local:8080/api/greeting
+   ```
+
+2. **Check OpenTelemetry Collector is receiving data**:
+   ```bash
+   kubectl logs -n opentelemetry daemonset/opentelemetry-collector | grep -i trace
+   ```
+
+3. **Verify Jaeger is receiving traces**:
+   ```bash
+   kubectl logs -n jaeger deployment/jaeger | grep -i received
+   ```
+
+4. **Force pod restart to re-inject instrumentation**:
+   ```bash
+   kubectl rollout restart deployment/node-service -n node-service
+   kubectl rollout restart deployment/demo-service -n demo-service
+   ```
 
 ## 📚 Additional Resources
 
