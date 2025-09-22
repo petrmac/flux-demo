@@ -149,7 +149,7 @@ generate-sbom:
   stage: package
   image: anchore/syft:latest
   extends: .java_service_changes
-  needs: ["build-docker"]
+  needs: ["build-docker", "determine-version"]
   dependencies:
     - determine-version
   rules:
