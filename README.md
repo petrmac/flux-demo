@@ -2,7 +2,190 @@
 
 This repository demonstrates a cloud-native microservices architecture with distributed tracing using Flux GitOps, OpenTelemetry auto-instrumentation, and observability best practices.
 
-## 📁 Repository Structure
+## 🏗️ Real-World GitOps Repository Architecture
+
+In a production environment, you would typically have multiple repositories following separation of concerns:
+
+```mermaid
+graph TB
+    subgraph "Developer Repositories"
+        A1[java-service repo]
+        A2[node-service repo]
+        A3[other-service repos]
+    end
+
+    subgraph "GitOps Repository"
+        B[flux-config repo]
+        B --> B1[clusters/]
+        B --> B2[infrastructure/]
+        B --> B3[apps/]
+    end
+
+    subgraph "Infrastructure Repository"
+        C[terraform-infra repo]
+        C --> C1[modules/]
+        C --> C2[environments/]
+        C --> C3[flux-bootstrap/]
+    end
+
+    subgraph "Kubernetes Clusters"
+        D1[Development]
+        D2[Staging]
+        D3[Production]
+    end
+
+    A1 -->|CI/CD builds images| E[Container Registry]
+    A2 -->|CI/CD builds images| E
+    A3 -->|CI/CD builds images| E
+
+    C -->|1. Provisions clusters| D1
+    C -->|1. Provisions clusters| D2
+    C -->|1. Provisions clusters| D3
+
+    C -->|2. Installs Flux| D1
+    C -->|2. Installs Flux| D2
+    C -->|2. Installs Flux| D3
+
+    B -->|3. Flux syncs configs| D1
+    B -->|3. Flux syncs configs| D2
+    B -->|3. Flux syncs configs| D3
+
+    E -->|4. Flux pulls images| D1
+    E -->|4. Flux pulls images| D2
+    E -->|4. Flux pulls images| D3
+```
+
+### Repository Separation Strategy
+
+#### 1. **Application Repositories** (`java-service`, `node-service`, etc.)
+- Contains application source code only
+- CI/CD pipeline builds and pushes container images
+- Developers work here daily
+- No Kubernetes manifests (separation of concerns)
+
+```yaml
+# Example: java-service/.gitlab-ci.yml
+stages:
+  - build
+  - test
+  - publish
+
+publish:
+  stage: publish
+  script:
+    - docker build -t $REGISTRY/java-service:$VERSION .
+    - docker push $REGISTRY/java-service:$VERSION
+```
+
+#### 2. **Flux Configuration Repository** (`flux-config`)
+- Contains all Kubernetes manifests and Flux configurations
+- No application code
+- Managed by platform/DevOps team
+- Single source of truth for cluster state
+
+```
+flux-config/
+├── clusters/
+│   ├── production/
+│   │   ├── flux-system/
+│   │   ├── infrastructure.yaml
+│   │   └── apps.yaml
+│   ├── staging/
+│   └── development/
+├── infrastructure/
+│   ├── common/
+│   ├── monitoring/
+│   ├── ingress/
+│   └── sources/
+└── apps/
+    ├── base/
+    └── overlays/
+        ├── production/
+        ├── staging/
+        └── development/
+```
+
+#### 3. **Terraform Infrastructure Repository** (`terraform-infra`)
+- Provisions cloud infrastructure (EKS/GKE/AKS clusters)
+- Installs and configures Flux via Terraform
+- Manages cloud resources (VPC, IAM, DNS, etc.)
+- See [Complete Terraform Flux Module Example](docs/terraform-flux-example.md)
+
+```hcl
+# Example: terraform-infra/modules/flux-bootstrap/main.tf
+module "flux_bootstrap" {
+  source = "github.com/fluxcd/terraform-provider-flux//modules/bootstrap"
+
+  github_owner         = var.github_owner
+  github_repository    = var.flux_config_repo
+  github_token         = var.github_token
+  target_path          = "clusters/${var.environment}"
+  components_extra     = ["image-reflector-controller", "image-automation-controller"]
+}
+```
+
+### Real-World Workflow
+
+1. **Infrastructure Provisioning** (Day 0)
+   ```bash
+   # From terraform-infra repo
+   terraform apply -var="environment=production"
+   # This creates:
+   # - Kubernetes cluster
+   # - Networking, IAM, storage
+   # - Installs Flux pointing to flux-config repo
+   ```
+
+2. **Developer Workflow** (Day 2)
+   ```bash
+   # Developer makes changes in java-service repo
+   git commit -m "feat: add new endpoint"
+   git push
+   # CI/CD automatically:
+   # - Runs tests
+   # - Builds container: java-service:1.2.3
+   # - Pushes to registry
+   ```
+
+3. **GitOps Deployment**
+   ```yaml
+   # Platform team updates flux-config repo
+   # apps/overlays/production/java-service-patch.yaml
+   - name: java-service
+     newTag: 1.2.3  # Or use Flux image automation
+   ```
+
+4. **Flux Synchronization**
+   - Flux detects changes in `flux-config` repo
+   - Applies manifests to cluster
+   - Pulls new images from registry
+   - Updates running workloads
+
+### Benefits of This Architecture
+
+✅ **Separation of Concerns**
+- Developers focus on code
+- Platform team manages infrastructure
+- Clear ownership boundaries
+
+✅ **Security**
+- Application repos don't need cluster access
+- Flux has minimal permissions (pull only)
+- Secrets managed separately (SOPS/Sealed Secrets)
+
+✅ **Scalability**
+- Easy to add new clusters
+- Consistent across environments
+- Reusable Terraform modules
+
+✅ **Auditability**
+- All changes tracked in Git
+- Clear deployment history
+- Easy rollbacks
+
+## 📁 Current Demo Repository Structure
+
+> **Note**: This demo repository combines all components for simplicity. In production, these would be separate repositories as shown above.
 
 ```
 flux-demo/
@@ -424,6 +607,91 @@ flux reconcile image update demo-service
 3. **Update image tag** in Kubernetes manifests
 4. **Commit and push** to Git
 5. **Flux deploys** automatically
+
+## 🔄 Migration from Demo to Production Setup
+
+### Step 1: Split the Repositories
+
+```bash
+# 1. Create separate application repositories
+git subtree split --prefix=java-service -b java-service-branch
+git subtree split --prefix=node-service -b node-service-branch
+
+# 2. Push to new repositories
+git push git@github.com:yourorg/java-service.git java-service-branch:main
+git push git@github.com:yourorg/node-service.git node-service-branch:main
+
+# 3. Create flux-config repository
+git subtree split --prefix=flux -b flux-config-branch
+git push git@github.com:yourorg/flux-config.git flux-config-branch:main
+```
+
+### Step 2: Create Terraform Infrastructure
+
+```hcl
+# terraform-infra/environments/production/main.tf
+module "eks_cluster" {
+  source = "../../modules/eks"
+
+  cluster_name    = "production-cluster"
+  region          = "us-west-2"
+  node_groups     = var.node_groups
+}
+
+module "flux" {
+  source = "../../modules/flux-bootstrap"
+
+  cluster_endpoint = module.eks_cluster.endpoint
+  github_owner     = "yourorg"
+  github_repo      = "flux-config"
+  target_path      = "clusters/production"
+}
+```
+
+### Step 3: Update CI/CD Pipelines
+
+```yaml
+# java-service/.github/workflows/ci.yml
+name: Build and Push
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and push
+        run: |
+          docker build -t ghcr.io/yourorg/java-service:${{ github.sha }} .
+          docker push ghcr.io/yourorg/java-service:${{ github.sha }}
+
+      # No Kubernetes deployment here - Flux handles it
+```
+
+### Step 4: Configure Flux for Multi-Environment
+
+```yaml
+# flux-config/clusters/production/apps.yaml
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: ./apps/overlays/production
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-config  # Environment-specific values
+```
 
 ## 🔒 Security Best Practices
 

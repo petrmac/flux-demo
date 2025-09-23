@@ -240,6 +240,9 @@ create-release:
   needs: ["check-release", "build-docker"]
   dependencies:
     - check-release
+  variables:
+    GIT_STRATEGY: clone
+    GIT_DEPTH: 0  # Full clone to have complete history
   before_script:
     - apt-get update && apt-get install -y git
     - source java-service/release.env
@@ -249,25 +252,63 @@ create-release:
         cd java-service
         chmod +x ./gradlew
 
-        # Create GitLab Release (requires GITLAB_TOKEN variable)
+        # Configure Git for commits
+        git config --global user.email "gitlab-ci-bot@${CI_SERVER_HOST}"
+        git config --global user.name "GitLab CI Bot"
+
+        # Setup Git authentication using CI_JOB_TOKEN (automatically provided by GitLab)
+        # This token has push rights when job is triggered from protected branch
+        git remote set-url origin https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git
+
+        # Ensure we're on the correct branch
+        git checkout -B ${CI_COMMIT_BRANCH}
+        git pull origin ${CI_COMMIT_BRANCH}
+
+        # Create GitLab Release (use CI_JOB_TOKEN or custom GITLAB_TOKEN)
         if [ -n "$GITLAB_TOKEN" ]; then
+          echo "Creating release with GITLAB_TOKEN"
           ./gradlew gitlabRelease -Pgitlab.token=$GITLAB_TOKEN
+        elif [ -n "$CI_JOB_TOKEN" ]; then
+          echo "Creating release with CI_JOB_TOKEN"
+          ./gradlew gitlabRelease -Pgitlab.token=$CI_JOB_TOKEN
         else
-          echo "Warning: GITLAB_TOKEN not set, skipping GitLab release creation"
+          echo "Warning: No token available for release creation"
         fi
 
         # Increment version for next release
         ./gradlew incrementVersion
 
-        # Commit the version bump
-        git config --global user.email "gitlab-ci[bot]@gitlab.com"
-        git config --global user.name "gitlab-ci[bot]"
-
+        # Commit and push the version bump
         if [ -f version.properties ]; then
-          git remote set-url origin https://gitlab-ci-token:${GITLAB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git
           git add version.properties
           NEW_VERSION=$(grep "^version=" version.properties | cut -d'=' -f2)
-          git diff --staged --quiet || (git commit -m "chore: bump version to $NEW_VERSION [skip ci]" && git push origin HEAD:$CI_COMMIT_BRANCH)
+
+          # Check if there are changes to commit
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+
+            # Try to push with retries
+            RETRY=0
+            MAX_RETRIES=3
+            while [ $RETRY -lt $MAX_RETRIES ]; do
+              if git push origin HEAD:${CI_COMMIT_BRANCH}; then
+                echo "Successfully pushed version bump"
+                break
+              else
+                echo "Push failed, retry $((RETRY + 1))/$MAX_RETRIES"
+                RETRY=$((RETRY + 1))
+                sleep 2
+                git pull --rebase origin ${CI_COMMIT_BRANCH}
+              fi
+            done
+
+            if [ $RETRY -eq $MAX_RETRIES ]; then
+              echo "Failed to push after $MAX_RETRIES attempts"
+              exit 1
+            fi
+          else
+            echo "No changes to commit"
+          fi
         fi
       else
         echo "No release needed"
