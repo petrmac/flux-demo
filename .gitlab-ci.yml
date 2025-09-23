@@ -37,6 +37,8 @@ build-java:
   stage: build
   image: eclipse-temurin:21-jdk
   extends: .java_service_changes
+  before_script:
+    - apt-get update && apt-get install -y git
   script:
     - cd java-service
     - chmod +x ./gradlew
@@ -68,6 +70,8 @@ determine-version:
   image: eclipse-temurin:21-jdk
   extends: .java_service_changes
   needs: ["build-java"]
+  before_script:
+    - apt-get update && apt-get install -y git
   script:
     - cd java-service
     - chmod +x ./gradlew
@@ -205,6 +209,8 @@ check-release:
       changes:
         - java-service/**
         - .gitlab-ci.yml
+  before_script:
+    - apt-get update && apt-get install -y git
   script:
     - cd java-service
     - chmod +x ./gradlew
@@ -235,6 +241,7 @@ create-release:
   dependencies:
     - check-release
   before_script:
+    - apt-get update && apt-get install -y git
     - source java-service/release.env
   script:
     - |
