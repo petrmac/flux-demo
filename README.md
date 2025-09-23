@@ -161,6 +161,451 @@ module "flux_bootstrap" {
    - Pulls new images from registry
    - Updates running workloads
 
+### Image Tagging and Promotion Strategy
+
+#### Tagging Convention
+
+```mermaid
+graph LR
+    subgraph "CI/CD Pipeline"
+        A[Code Push] --> B{Branch?}
+        B -->|main| C[Build: 1.2.3]
+        B -->|feature| D[Build: 1.2.3-feat-xyz]
+        B -->|release| E[Build: 1.2.3-rc1]
+    end
+
+    subgraph "Registry Strategy"
+        C --> F[dev-registry/app:1.2.3]
+        E --> G[dev-registry/app:1.2.3-rc1]
+        F --> H[Tag: 1.2.3-preprod]
+        H --> I[staging-registry/app:1.2.3]
+        I --> J[Tag: 1.2.3-prod]
+        J --> K[prod-registry/app:1.2.3]
+    end
+
+    subgraph "Flux Automation"
+        F -->|Auto Deploy| L[DEV Environment]
+        H -->|Manual Approval| M[PREPROD Environment]
+        K -->|Manual Approval| N[PROD Environment]
+    end
+```
+
+#### Environment-Specific Image Policies
+
+```yaml
+# flux-config/clusters/development/image-policies.yaml
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: demo-service
+  namespace: flux-system
+spec:
+  image: ghcr.io/yourorg/demo-service
+  interval: 1m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: demo-service-dev
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: demo-service
+  policy:
+    semver:
+      range: ">=1.0.0"  # Any semver version auto-deploys to dev
+---
+# flux-config/clusters/staging/image-policies.yaml
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: demo-service-staging
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: demo-service
+  filterTags:
+    pattern: '^.*-preprod$'  # Only tags ending with -preprod
+  policy:
+    semver:
+      range: ">=1.0.0-preprod"
+---
+# flux-config/clusters/production/image-policies.yaml
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: demo-service-prod
+  namespace: flux-system
+spec:
+  image: prod-registry.company.com/demo-service  # Different registry
+  interval: 5m
+  secretRef:
+    name: prod-registry-auth  # Separate credentials
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: demo-service-prod
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: demo-service-prod
+  filterTags:
+    pattern: '^.*-prod$'  # Only tags ending with -prod
+  policy:
+    semver:
+      range: ">=1.0.0-prod"
+```
+
+#### CI/CD Pipeline Example
+
+```yaml
+# .gitlab-ci.yml or .github/workflows/release.yml
+stages:
+  - build
+  - promote
+  - release
+
+build:
+  script:
+    # Build and push with semver tag
+    - docker build -t ${REGISTRY}/app:${VERSION} .
+    - docker push ${REGISTRY}/app:${VERSION}
+    # Auto-deploys to DEV via Flux
+
+promote-to-staging:
+  when: manual  # Requires manual approval
+  script:
+    # Tag for staging
+    - docker pull ${REGISTRY}/app:${VERSION}
+    - docker tag ${REGISTRY}/app:${VERSION} ${REGISTRY}/app:${VERSION}-preprod
+    - docker push ${REGISTRY}/app:${VERSION}-preprod
+    # Flux picks this up for PREPROD
+
+promote-to-production:
+  when: manual  # Requires manual approval
+  script:
+    # Copy to production registry with different auth
+    - docker pull ${STAGING_REGISTRY}/app:${VERSION}
+    - docker tag ${STAGING_REGISTRY}/app:${VERSION} ${PROD_REGISTRY}/app:${VERSION}-prod
+    - docker login ${PROD_REGISTRY} -u ${PROD_USER} -p ${PROD_TOKEN}
+    - docker push ${PROD_REGISTRY}/app:${VERSION}-prod
+    # Flux picks this up for PROD
+```
+
+
+#### Advanced Promotion Strategies
+
+##### Blue-Green Deployments with Image Tags
+
+```yaml
+# Production can use blue-green strategy
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: app-blue
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: app-prod-repo
+  filterTags:
+    pattern: '^[0-9]+\.[0-9]+\.[0-9]+-blue$'
+  policy:
+    semver:
+      range: ">=1.0.0"
+
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: app-green
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: app-prod-repo
+  filterTags:
+    pattern: '^[0-9]+\.[0-9]+\.[0-9]+-green$'
+  policy:
+    semver:
+      range: ">=1.0.0"
+```
+
+##### Canary Releases with Progressive Delivery
+
+```yaml
+# Using Flagger for canary deployments
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata:
+  name: app-canary
+  namespace: production
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: app
+  progressDeadlineSeconds: 600
+  service:
+    port: 8080
+  analysis:
+    interval: 1m
+    threshold: 5
+    maxWeight: 50
+    stepWeight: 10
+    metrics:
+    - name: request-success-rate
+      thresholdRange:
+        min: 99
+      interval: 1m
+  # Automatic promotion based on image tags
+  provider: flux
+  imageRepository: app-prod-repo
+  imageTag: "1.2.3-canary"
+```
+
+##### Emergency Rollback Procedures
+
+```bash
+# Quick rollback using Flux
+flux suspend kustomization apps --namespace=flux-system
+flux resume kustomization apps --namespace=flux-system
+
+# Manual image rollback
+kubectl set image deployment/app app=prod-registry.company.com/app:1.2.2-prod \
+  -n production
+
+# GitOps rollback
+git revert HEAD  # Revert last commit with image update
+git push origin main
+# Flux will sync and rollback automatically
+```
+
+### Registry Separation Strategy
+
+In case SOC2 or ISO27001 compliance needs to be in place, a repository separation with different set of rules needs to be put in place.
+If not required, you can ignore this chapter. There could be also variations to this strategy,
+when only production is segregated.
+
+```yaml
+# Different registries for different environments
+Development:
+  Registry: ghcr.io/yourorg/*
+  Access: All developers can push
+  Retention: 30 days
+
+Staging:
+  Registry: staging-registry.company.com/*
+  Access: CI/CD + Release team
+  Retention: 90 days
+  Scanning: Required
+
+Production:
+  Registry: prod-registry.company.com/*
+  Access: CI/CD with approval only
+  Retention: 1 year
+  Scanning: Required + signed images
+  Compliance: SOC2, ISO27001 compliant
+```
+
+#### Multi-Environment Image Promotion Workflow
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant CI as CI/CD
+    participant DR as Dev Registry
+    participant SR as Staging Registry
+    participant PR as Prod Registry
+    participant FD as Flux (Dev)
+    participant FS as Flux (Staging)
+    participant FP as Flux (Prod)
+
+    Dev->>CI: Push to main branch
+    CI->>CI: Build & Test
+    CI->>DR: Push image:1.2.3
+    FD->>DR: Detect new image
+    FD->>FD: Deploy to Dev
+
+    Note over CI,SR: Manual Approval Required
+    CI->>DR: Pull image:1.2.3
+    CI->>SR: Push image:1.2.3-preprod
+    FS->>SR: Detect -preprod tag
+    FS->>FS: Deploy to Staging
+
+    Note over CI,PR: Manual Approval + Security Scan
+    CI->>SR: Pull image:1.2.3-preprod
+    CI->>PR: Push image:1.2.3-prod (signed)
+    FP->>PR: Detect -prod tag
+    FP->>FP: Deploy to Production
+```
+
+##### Example: Complete Promotion Pipeline
+
+```yaml
+# .gitlab-ci.yml
+variables:
+  DEV_REGISTRY: ghcr.io/yourorg
+  STAGING_REGISTRY: staging.company.com
+  PROD_REGISTRY: prod.company.com
+
+stages:
+  - build
+  - test
+  - deploy-dev
+  - promote-staging
+  - promote-production
+
+# Automatic deployment to DEV
+deploy-dev:
+  stage: deploy-dev
+  script:
+    - docker build -t ${DEV_REGISTRY}/${APP_NAME}:${VERSION} .
+    - docker push ${DEV_REGISTRY}/${APP_NAME}:${VERSION}
+    # Flux automatically picks this up for dev environment
+  only:
+    - main
+
+# Manual promotion to STAGING
+promote-staging:
+  stage: promote-staging
+  when: manual
+  script:
+    # Security scan before promotion
+    - trivy image ${DEV_REGISTRY}/${APP_NAME}:${VERSION}
+
+    # Re-tag for staging
+    - docker pull ${DEV_REGISTRY}/${APP_NAME}:${VERSION}
+    - docker tag ${DEV_REGISTRY}/${APP_NAME}:${VERSION} \
+                 ${STAGING_REGISTRY}/${APP_NAME}:${VERSION}-preprod
+
+    # Push to staging registry
+    - docker login ${STAGING_REGISTRY} -u ${STAGING_USER} -p ${STAGING_TOKEN}
+    - docker push ${STAGING_REGISTRY}/${APP_NAME}:${VERSION}-preprod
+
+    # Create promotion record
+    - |
+      echo "Image promoted to staging" >> promotion-log.txt
+      echo "Version: ${VERSION}" >> promotion-log.txt
+      echo "Promoted by: ${GITLAB_USER_LOGIN}" >> promotion-log.txt
+      echo "Date: $(date)" >> promotion-log.txt
+  only:
+    - main
+
+# Manual promotion to PRODUCTION
+promote-production:
+  stage: promote-production
+  when: manual
+  needs: ["promote-staging"]
+  script:
+    # Enhanced security checks
+    - trivy image --severity HIGH,CRITICAL \
+                  ${STAGING_REGISTRY}/${APP_NAME}:${VERSION}-preprod
+
+    # Sign image with cosign
+    - cosign sign --key ${COSIGN_KEY} \
+                  ${STAGING_REGISTRY}/${APP_NAME}:${VERSION}-preprod
+
+    # Copy to production registry
+    - docker pull ${STAGING_REGISTRY}/${APP_NAME}:${VERSION}-preprod
+    - docker tag ${STAGING_REGISTRY}/${APP_NAME}:${VERSION}-preprod \
+                 ${PROD_REGISTRY}/${APP_NAME}:${VERSION}-prod
+
+    # Push to production registry (air-gapped)
+    - docker login ${PROD_REGISTRY} -u ${PROD_USER} -p ${PROD_TOKEN}
+    - docker push ${PROD_REGISTRY}/${APP_NAME}:${VERSION}-prod
+
+    # Create audit trail
+    - |
+      cat <<EOF | kubectl apply -f -
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: promotion-${VERSION}
+        namespace: flux-system
+      data:
+        version: "${VERSION}"
+        promoted_by: "${GITLAB_USER_LOGIN}"
+        promoted_at: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        source_image: "${STAGING_REGISTRY}/${APP_NAME}:${VERSION}-preprod"
+        target_image: "${PROD_REGISTRY}/${APP_NAME}:${VERSION}-prod"
+      EOF
+  only:
+    - main
+  environment:
+    name: production
+    url: https://app.company.com
+```
+
+##### Flux Configuration for Each Environment
+
+```yaml
+# clusters/development/apps-image-automation.yaml
+apiVersion: image.toolkit.fluxcd.io/v1beta1
+kind: ImageUpdateAutomation
+metadata:
+  name: apps-automation
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        email: fluxbot@company.com
+        name: Flux Bot
+      messageTemplate: |
+        [DEV] Automated image update
+
+        Images:
+        {{range .Updated.Images}}
+        - {{.}}
+        {{end}}
+    push:
+      branch: main
+  update:
+    path: "./clusters/development"
+    strategy: Setters
+
+---
+# clusters/staging/apps-image-policy.yaml
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: app-staging
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: app-staging-repo
+  filterTags:
+    pattern: '^[0-9]+\.[0-9]+\.[0-9]+-preprod$'
+    extract: '$0'
+  policy:
+    alphabetical:
+      order: asc
+
+---
+# clusters/production/apps-image-policy.yaml
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: app-production
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: app-prod-repo
+  filterTags:
+    pattern: '^[0-9]+\.[0-9]+\.[0-9]+-prod$'
+    extract: '$0'
+  policy:
+    alphabetical:
+      order: asc
+```
+
 ### Benefits of This Architecture
 
 ✅ **Separation of Concerns**
@@ -172,16 +617,29 @@ module "flux_bootstrap" {
 - Application repos don't need cluster access
 - Flux has minimal permissions (pull only)
 - Secrets managed separately (SOPS/Sealed Secrets)
+- Production images in isolated registry with strict access
+- Image signing and verification with cosign
+- Vulnerability scanning at each promotion stage
 
 ✅ **Scalability**
 - Easy to add new clusters
 - Consistent across environments
 - Reusable Terraform modules
+- Multi-region deployments supported
 
 ✅ **Auditability**
 - All changes tracked in Git
 - Clear deployment history
 - Easy rollbacks
+- Image promotion tracked through tags
+- Complete audit trail with ConfigMaps
+- Compliance-ready with SOC2/ISO27001
+
+✅ **Reliability**
+- Automated rollback on failures
+- Progressive delivery support
+- Blue-green deployment capabilities
+- Canary releases with metrics-based promotion
 
 ## 📁 Current Demo Repository Structure
 

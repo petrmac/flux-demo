@@ -264,15 +264,44 @@ create-release:
         git checkout -B ${CI_COMMIT_BRANCH}
         git pull origin ${CI_COMMIT_BRANCH}
 
-        # Create GitLab Release (use CI_JOB_TOKEN or custom GITLAB_TOKEN)
-        if [ -n "$GITLAB_TOKEN" ]; then
-          echo "Creating release with GITLAB_TOKEN"
-          ./gradlew gitlabRelease -Pgitlab.token=$GITLAB_TOKEN
-        elif [ -n "$CI_JOB_TOKEN" ]; then
-          echo "Creating release with CI_JOB_TOKEN"
-          ./gradlew gitlabRelease -Pgitlab.token=$CI_JOB_TOKEN
+        # Get current version
+        CURRENT_VERSION=$(grep "^version=" version.properties | cut -d'=' -f2)
+        TAG_NAME="v${CURRENT_VERSION}"
+
+        # Create and push git tag
+        echo "Creating tag: $TAG_NAME"
+        git tag -a "$TAG_NAME" -m "Release version $CURRENT_VERSION"
+
+        # Push the tag
+        if git push origin "$TAG_NAME"; then
+          echo "Successfully pushed tag $TAG_NAME"
+
+          # Create GitLab release using API if token is available
+          if [ -n "$GITLAB_TOKEN" ] || [ -n "$CI_JOB_TOKEN" ]; then
+            TOKEN="${GITLAB_TOKEN:-$CI_JOB_TOKEN}"
+
+            # Generate simple changelog
+            PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+            if [ -n "$PREVIOUS_TAG" ]; then
+              CHANGELOG=$(git log --pretty=format:"- %s" ${PREVIOUS_TAG}..HEAD | head -20)
+            else
+              CHANGELOG="Initial release"
+            fi
+
+            # Create release via GitLab API
+            curl --request POST \
+              --header "PRIVATE-TOKEN: $TOKEN" \
+              --header "Content-Type: application/json" \
+              --data "{
+                \"name\": \"Release $CURRENT_VERSION\",
+                \"tag_name\": \"$TAG_NAME\",
+                \"description\": \"## Changelog\\n\\n$CHANGELOG\"
+              }" \
+              "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/releases" || \
+              echo "Warning: Could not create GitLab release via API"
+          fi
         else
-          echo "Warning: No token available for release creation"
+          echo "Warning: Could not push tag (may already exist)"
         fi
 
         # Increment version for next release
