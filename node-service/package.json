@@ -1,6 +1,6 @@
 {
   "name": "node-service",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "NestJS backend service for distributed tracing demo",
   "author": "",
   "private": true,

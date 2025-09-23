@@ -256,9 +256,18 @@ create-release:
         git config --global user.email "gitlab-ci-bot@${CI_SERVER_HOST}"
         git config --global user.name "GitLab CI Bot"
 
-        # Setup Git authentication using CI_JOB_TOKEN (automatically provided by GitLab)
-        # This token has push rights when job is triggered from protected branch
-        git remote set-url origin https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git
+        # Setup Git authentication
+        # Option 1: Use a Project Access Token or Personal Access Token with write permissions
+        # You need to set GITLAB_TOKEN as a CI/CD variable in Settings > CI/CD > Variables
+        if [ -n "$GITLAB_TOKEN" ]; then
+          echo "Using GITLAB_TOKEN for authentication"
+          git remote set-url origin https://oauth2:${GITLAB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git
+        else
+          echo "Warning: GITLAB_TOKEN not set. Tag push may fail."
+          echo "Please create a Project Access Token with 'write_repository' scope and add it as GITLAB_TOKEN in CI/CD variables"
+          # Fallback to CI_JOB_TOKEN (won't work for pushing)
+          git remote set-url origin https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git
+        fi
 
         # Ensure we're on the correct branch
         git checkout -B ${CI_COMMIT_BRANCH}
@@ -398,12 +407,13 @@ determine-version-node:
   script:
     - cd node-service
     - |
-      # Read version from version.json
-      VERSION=$(cat version.json | jq -r '.version' 2>/dev/null || echo "1.0.0")
+      # Use package.json as the single source of truth for version
+      VERSION=$(cat package.json | jq -r '.version' || echo "1.0.0")
 
-      # If version is empty, use package.json version
-      if [ -z "$VERSION" ]; then
-        VERSION=$(cat package.json | jq -r '.version' || echo "1.0.0")
+      # Validate version format
+      if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
+        echo "Error: Invalid version format in package.json: $VERSION"
+        exit 1
       fi
 
       # For MR builds, add MR suffix
