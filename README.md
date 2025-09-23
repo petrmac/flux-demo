@@ -163,7 +163,9 @@ module "flux_bootstrap" {
 
 ### Image Tagging and Promotion Strategy
 
-#### Tagging Convention
+#### Option 1: Single Registry with Tag-Based Promotion (Simpler Setup)
+
+For most organizations, a single registry with different tags per environment provides sufficient isolation:
 
 ```mermaid
 graph LR
@@ -174,7 +176,35 @@ graph LR
         B -->|release| E[Build: 1.2.3-rc1]
     end
 
-    subgraph "Registry Strategy"
+    subgraph "Single Registry Strategy"
+        C --> F[ghcr.io/org/app:1.2.3]
+        F --> G[ghcr.io/org/app:1.2.3-staging]
+        G --> H[ghcr.io/org/app:1.2.3-prod]
+        D --> I[ghcr.io/org/app:1.2.3-feat-xyz]
+        E --> J[ghcr.io/org/app:1.2.3-rc1]
+    end
+
+    subgraph "Flux Automation"
+        F -->|Auto Deploy| K[DEV Environment]
+        G -->|Manual Approval| L[STAGING Environment]
+        H -->|Manual Approval| M[PROD Environment]
+    end
+```
+
+#### Option 2: Multi-Registry Strategy (SOC2/ISO27001 Compliance)
+
+For organizations requiring strict compliance (SOC2, ISO27001), separate registries provide additional security boundaries:
+
+```mermaid
+graph LR
+    subgraph "CI/CD Pipeline"
+        A[Code Push] --> B{Branch?}
+        B -->|main| C[Build: 1.2.3]
+        B -->|feature| D[Build: 1.2.3-feat-xyz]
+        B -->|release| E[Build: 1.2.3-rc1]
+    end
+
+    subgraph "Multi-Registry Strategy"
         C --> F[dev-registry/app:1.2.3]
         E --> G[dev-registry/app:1.2.3-rc1]
         F --> H[Tag: 1.2.3-preprod]
@@ -192,7 +222,67 @@ graph LR
 
 #### Environment-Specific Image Policies
 
+##### Single Registry Configuration (Option 1)
+
 ```yaml
+# All environments use the same registry, different tag patterns
+# flux-config/clusters/development/image-policies.yaml
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: demo-service
+  namespace: flux-system
+spec:
+  image: ghcr.io/yourorg/demo-service
+  interval: 1m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: demo-service-dev
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: demo-service
+  policy:
+    semver:
+      range: ">=1.0.0"  # Any clean semver deploys to dev
+---
+# flux-config/clusters/staging/image-policies.yaml
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: demo-service-staging
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: demo-service  # Same repository
+  filterTags:
+    pattern: '^[0-9]+\.[0-9]+\.[0-9]+-staging$'
+  policy:
+    semver:
+      range: ">=1.0.0"
+---
+# flux-config/clusters/production/image-policies.yaml
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: demo-service-prod
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: demo-service  # Same repository
+  filterTags:
+    pattern: '^[0-9]+\.[0-9]+\.[0-9]+-prod$'
+  policy:
+    semver:
+      range: ">=1.0.0"
+```
+
+##### Multi-Registry Configuration (Option 2)
+
+```yaml
+# Different registries per environment for compliance
 # flux-config/clusters/development/image-policies.yaml
 apiVersion: image.toolkit.fluxcd.io/v1beta2
 kind: ImageRepository
@@ -217,13 +307,24 @@ spec:
 ---
 # flux-config/clusters/staging/image-policies.yaml
 apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: demo-service-staging
+  namespace: flux-system
+spec:
+  image: staging-registry.company.com/demo-service
+  interval: 5m
+  secretRef:
+    name: staging-registry-auth
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
 kind: ImagePolicy
 metadata:
   name: demo-service-staging
   namespace: flux-system
 spec:
   imageRepositoryRef:
-    name: demo-service
+    name: demo-service-staging
   filterTags:
     pattern: '^.*-preprod$'  # Only tags ending with -preprod
   policy:
@@ -257,127 +358,477 @@ spec:
       range: ">=1.0.0-prod"
 ```
 
-#### CI/CD Pipeline Example
+#### Choosing Between Single and Multi-Registry
+
+| Aspect | Single Registry (Option 1) | Multi-Registry (Option 2) |
+|--------|---------------------------|---------------------------|
+| **Complexity** | ✅ Simple setup and maintenance | ⚠️ More complex configuration |
+| **Cost** | ✅ Single registry billing | ❌ Multiple registry costs |
+| **Access Control** | ⚠️ Same credentials for all environments | ✅ Isolated credentials per environment |
+| **Compliance** | ⚠️ May not meet strict requirements | ✅ SOC2/ISO27001 compliant |
+| **Network Isolation** | ❌ No network boundaries | ✅ Can use air-gapped registries |
+| **Audit Trail** | ✅ Single audit log | ✅ Separate audit logs per environment |
+| **Image Promotion** | ✅ Simple re-tagging | ⚠️ Requires cross-registry copying |
+| **Rollback** | ✅ All versions in one place | ⚠️ Need to copy back from prod registry |
+
+**Recommendation:**
+- Start with **Option 1** (single registry) for most projects
+- Consider **Option 2** (multi-registry) when:
+  - Required by compliance frameworks (SOC2, ISO27001, PCI-DSS)
+  - Production environment needs air-gap isolation
+  - Different teams manage different environments
+  - Registry costs are not a concern
+
+#### CI/CD Pipeline Examples
+
+##### Single Registry Pipeline (Option 1)
 
 ```yaml
-# .gitlab-ci.yml or .github/workflows/release.yml
+# .gitlab-ci.yml - Single registry with different tags
 stages:
   - build
   - promote
-  - release
 
 build:
   script:
-    # Build and push with semver tag
+    # Build and push with clean semver tag
     - docker build -t ${REGISTRY}/app:${VERSION} .
     - docker push ${REGISTRY}/app:${VERSION}
     # Auto-deploys to DEV via Flux
 
 promote-to-staging:
-  when: manual  # Requires manual approval
+  when: manual
   script:
-    # Tag for staging
+    # Just add staging tag to existing image
     - docker pull ${REGISTRY}/app:${VERSION}
-    - docker tag ${REGISTRY}/app:${VERSION} ${REGISTRY}/app:${VERSION}-preprod
-    - docker push ${REGISTRY}/app:${VERSION}-preprod
-    # Flux picks this up for PREPROD
+    - docker tag ${REGISTRY}/app:${VERSION} ${REGISTRY}/app:${VERSION}-staging
+    - docker push ${REGISTRY}/app:${VERSION}-staging
+    # Flux picks this up for STAGING
 
 promote-to-production:
-  when: manual  # Requires manual approval
+  when: manual
   script:
-    # Copy to production registry with different auth
-    - docker pull ${STAGING_REGISTRY}/app:${VERSION}
-    - docker tag ${STAGING_REGISTRY}/app:${VERSION} ${PROD_REGISTRY}/app:${VERSION}-prod
+    # Add production tag
+    - docker pull ${REGISTRY}/app:${VERSION}
+    - docker tag ${REGISTRY}/app:${VERSION} ${REGISTRY}/app:${VERSION}-prod
+    - docker push ${REGISTRY}/app:${VERSION}-prod
+    # Flux picks this up for PROD
+```
+
+##### Multi-Registry Pipeline (Option 2)
+
+```yaml
+# .gitlab-ci.yml - Multiple registries for compliance
+stages:
+  - build
+  - promote
+
+build:
+  script:
+    # Build and push to dev registry
+    - docker build -t ${DEV_REGISTRY}/app:${VERSION} .
+    - docker push ${DEV_REGISTRY}/app:${VERSION}
+    # Auto-deploys to DEV via Flux
+
+promote-to-staging:
+  when: manual
+  script:
+    # Copy to staging registry with different auth
+    - docker pull ${DEV_REGISTRY}/app:${VERSION}
+    - docker tag ${DEV_REGISTRY}/app:${VERSION} ${STAGING_REGISTRY}/app:${VERSION}-preprod
+    - docker login ${STAGING_REGISTRY} -u ${STAGING_USER} -p ${STAGING_TOKEN}
+    - docker push ${STAGING_REGISTRY}/app:${VERSION}-preprod
+    # Flux picks this up for STAGING
+
+promote-to-production:
+  when: manual
+  script:
+    # Copy to production registry (potentially air-gapped)
+    - docker pull ${STAGING_REGISTRY}/app:${VERSION}-preprod
+    - docker tag ${STAGING_REGISTRY}/app:${VERSION}-preprod ${PROD_REGISTRY}/app:${VERSION}-prod
     - docker login ${PROD_REGISTRY} -u ${PROD_USER} -p ${PROD_TOKEN}
     - docker push ${PROD_REGISTRY}/app:${VERSION}-prod
     # Flux picks this up for PROD
 ```
 
 
-#### Advanced Promotion Strategies
+#### Progressive Deployment Strategies
 
-##### Blue-Green Deployments with Image Tags
+Progressive deployment reduces risk by gradually rolling out changes to production. Here are the main strategies:
 
-```yaml
-# Production can use blue-green strategy
-apiVersion: image.toolkit.fluxcd.io/v1beta2
-kind: ImagePolicy
-metadata:
-  name: app-blue
-  namespace: flux-system
-spec:
-  imageRepositoryRef:
-    name: app-prod-repo
-  filterTags:
-    pattern: '^[0-9]+\.[0-9]+\.[0-9]+-blue$'
-  policy:
-    semver:
-      range: ">=1.0.0"
+##### Deployment Strategy Overview
 
----
-apiVersion: image.toolkit.fluxcd.io/v1beta2
-kind: ImagePolicy
-metadata:
-  name: app-green
-  namespace: flux-system
-spec:
-  imageRepositoryRef:
-    name: app-prod-repo
-  filterTags:
-    pattern: '^[0-9]+\.[0-9]+\.[0-9]+-green$'
-  policy:
-    semver:
-      range: ">=1.0.0"
+```mermaid
+graph TB
+    subgraph "Progressive Deployment Flow"
+        A[New Version 2.0] --> B{Strategy?}
+
+        B -->|Canary| C[5% Traffic to v2.0]
+        C --> D[Monitor Metrics]
+        D -->|Success| E[10% → 25% → 50% → 100%]
+        D -->|Failure| F[Rollback to v1.0]
+
+        B -->|Blue-Green| G[Deploy to Blue]
+        G --> H[Test Blue Environment]
+        H -->|Success| I[Switch Traffic to Blue]
+        H -->|Failure| J[Keep Green Active]
+
+        B -->|Feature Flags| K[Deploy v2.0 Disabled]
+        K --> L[Enable for 5% Users]
+        L --> M[Gradual Rollout]
+        M --> N[100% Enabled]
+
+        B -->|A/B Testing| O[50% to v1.0]
+        O --> P[50% to v2.0]
+        P --> Q[Analyze Metrics]
+        Q --> R[Choose Winner]
+    end
 ```
 
-##### Canary Releases with Progressive Delivery
+##### 1. Canary Deployments with Flagger
+
+Canary deployments gradually shift traffic from the old version to the new version while monitoring key metrics.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Ingress
+    participant Primary as Primary (v1.0)
+    participant Canary as Canary (v2.0)
+    participant Flagger
+    participant Metrics as Prometheus
+
+    Note over Flagger: Deploy v2.0
+    Flagger->>Canary: Create canary deployment
+
+    loop Progressive Rollout
+        User->>Ingress: Request
+        alt 5% of traffic (initial)
+            Ingress->>Canary: Route to v2.0
+        else 95% of traffic
+            Ingress->>Primary: Route to v1.0
+        end
+
+        Flagger->>Metrics: Check success rate
+        alt Metrics healthy
+            Flagger->>Ingress: Increase to 10%, 25%, 50%, 100%
+        else Metrics unhealthy
+            Flagger->>Canary: Rollback
+            Flagger->>Ingress: Route 100% to v1.0
+        end
+    end
+```
 
 ```yaml
-# Using Flagger for canary deployments
+# Complete Flagger canary configuration
 apiVersion: flagger.app/v1beta1
 kind: Canary
 metadata:
-  name: app-canary
+  name: demo-service
   namespace: production
 spec:
+  # Target deployment
   targetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: app
-  progressDeadlineSeconds: 600
+    name: demo-service
+
+  # HPA reference (optional)
+  autoscalerRef:
+    apiVersion: autoscaling/v2
+    kind: HorizontalPodAutoscaler
+    name: demo-service
+
+  # Service configuration
   service:
     port: 8080
+    targetPort: 8080
+    gateways:
+    - public-gateway.istio-system.svc.cluster.local
+    hosts:
+    - app.example.com
+
+  # Progressive delivery configuration
   analysis:
+    # How often to check metrics
     interval: 1m
+
+    # Number of failed checks before rollback
     threshold: 5
+
+    # Max traffic percentage for canary
     maxWeight: 50
+
+    # Traffic increment step
     stepWeight: 10
+
+    # List of metrics to check
     metrics:
     - name: request-success-rate
       thresholdRange:
         min: 99
       interval: 1m
-  # Automatic promotion based on image tags
-  provider: flux
-  imageRepository: app-prod-repo
-  imageTag: "1.2.3-canary"
+
+    - name: request-duration
+      thresholdRange:
+        max: 500
+      interval: 1m
+
+    - name: custom-metric
+      templateRef:
+        name: custom-metric-check
+        namespace: flagger-system
+      thresholdRange:
+        min: 90
+
+    # Webhook for smoke tests
+    webhooks:
+    - name: smoke-test
+      url: http://flagger-loadtester.test/
+      timeout: 30s
+      metadata:
+        type: smoke
+        cmd: "curl -s http://demo-service-canary.production:8080/health"
+
+    # Load testing during canary analysis
+    - name: load-test
+      url: http://flagger-loadtester.test/
+      timeout: 5s
+      metadata:
+        type: cmd
+        cmd: "hey -z 1m -q 10 -c 2 http://demo-service-canary.production:8080/"
+
+  # Skip analysis for these user agents (testing)
+  skipAnalysis: false
 ```
+
+##### 2. Blue-Green Deployments
+
+Blue-Green deployments maintain two identical production environments, switching between them for zero-downtime deployments.
+
+```mermaid
+graph TB
+    subgraph "Blue-Green Deployment Flow"
+        subgraph "Initial State"
+            LB1[Load Balancer] -->|100% traffic| Blue1[Blue v1.0 - Active]
+            Green1[Green - Idle]
+        end
+
+        subgraph "Deploy to Green"
+            LB2[Load Balancer] -->|100% traffic| Blue2[Blue v1.0 - Active]
+            Deploy[CI/CD] -->|Deploy v2.0| Green2[Green v2.0 - Testing]
+        end
+
+        subgraph "Switch Traffic"
+            LB3[Load Balancer] -->|100% traffic| Green3[Green v2.0 - Active]
+            Blue3[Blue v1.0 - Standby]
+        end
+
+        subgraph "Next Deployment"
+            Deploy2[CI/CD] -->|Deploy v3.0| Blue4[Blue v3.0 - Testing]
+            LB4[Load Balancer] -->|100% traffic| Green4[Green v2.0 - Active]
+        end
+    end
+```
+
+```yaml
+# Blue-Green with Flux and Kustomize
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-service
+  namespace: production
+spec:
+  selector:
+    app: demo-service
+    version: blue  # or green
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+# Blue Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-service-blue
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: demo-service
+      version: blue
+  template:
+    metadata:
+      labels:
+        app: demo-service
+        version: blue
+    spec:
+      containers:
+      - name: demo-service
+        image: ghcr.io/org/demo-service:1.0.0-blue
+---
+# Green Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-service-green
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: demo-service
+      version: green
+  template:
+    metadata:
+      labels:
+        app: demo-service
+        version: green
+    spec:
+      containers:
+      - name: demo-service
+        image: ghcr.io/org/demo-service:2.0.0-green
+---
+# Switching script (in CI/CD)
+# kubectl patch service demo-service -p '{"spec":{"selector":{"version":"green"}}}'
+```
+
+##### 3. Feature Flag Deployments
+
+Deploy code to production but control feature visibility through configuration.
+
+```yaml
+# ConfigMap for feature flags
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: feature-flags
+  namespace: production
+data:
+  flags.json: |
+    {
+      "new-checkout-flow": {
+        "enabled": true,
+        "rollout": 25,
+        "groups": ["beta-users"]
+      },
+      "ai-recommendations": {
+        "enabled": false,
+        "rollout": 0
+      },
+      "dark-mode": {
+        "enabled": true,
+        "rollout": 100
+      }
+    }
+---
+# Application deployment with feature flags
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: demo-service
+        image: ghcr.io/org/demo-service:2.0.0
+        volumeMounts:
+        - name: feature-flags
+          mountPath: /config/features
+        env:
+        - name: FEATURE_FLAGS_PATH
+          value: /config/features/flags.json
+      volumes:
+      - name: feature-flags
+        configMap:
+          name: feature-flags
+```
+
+##### 4. A/B Testing Deployments
+
+Run multiple versions simultaneously to compare performance or user behavior.
+
+```yaml
+# Using Istio for A/B testing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: demo-service
+  namespace: production
+spec:
+  hosts:
+  - demo-service
+  http:
+  - match:
+    - headers:
+        x-user-group:
+          exact: test-group
+    route:
+    - destination:
+        host: demo-service
+        subset: v2
+      weight: 100
+  - route:
+    - destination:
+        host: demo-service
+        subset: v1
+      weight: 50
+    - destination:
+        host: demo-service
+        subset: v2
+      weight: 50
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: demo-service
+spec:
+  host: demo-service
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+  - name: v2
+    labels:
+      version: v2
+```
+
+##### Progressive Deployment Comparison
+
+| Strategy | Risk Level | Rollback Speed | Resource Usage | Complexity | Best For |
+|----------|-----------|----------------|----------------|------------|----------|
+| **Canary** | Low | Fast | Medium (2x pods during rollout) | Medium | Most production deployments |
+| **Blue-Green** | Very Low | Instant | High (2x infrastructure) | Low | Critical services with instant rollback needs |
+| **Feature Flags** | Very Low | Instant | Low | Medium | Feature rollouts, experimentation |
+| **A/B Testing** | Low | Fast | Medium | High | User behavior testing, performance comparison |
 
 ##### Emergency Rollback Procedures
 
 ```bash
-# Quick rollback using Flux
+# 1. Flagger canary rollback (automatic or manual)
+kubectl -n production set image deployment/demo-service \
+  demo-service=ghcr.io/org/demo-service:1.0.0
+
+# 2. Blue-Green instant rollback
+kubectl patch service demo-service -n production \
+  -p '{"spec":{"selector":{"version":"blue"}}}'
+
+# 3. Feature flag rollback
+kubectl patch configmap feature-flags -n production \
+  --type merge -p '{"data":{"flags.json":"{\"new-feature\":{\"enabled\":false}}"}}'
+
+# 4. Flux GitOps rollback
+git revert HEAD  # Revert last commit
+git push origin main
+# Or suspend and resume
 flux suspend kustomization apps --namespace=flux-system
 flux resume kustomization apps --namespace=flux-system
 
-# Manual image rollback
-kubectl set image deployment/app app=prod-registry.company.com/app:1.2.2-prod \
-  -n production
-
-# GitOps rollback
-git revert HEAD  # Revert last commit with image update
-git push origin main
-# Flux will sync and rollback automatically
+# 5. Complete namespace rollback
+kubectl rollout undo deployment/demo-service -n production
+kubectl rollout status deployment/demo-service -n production
 ```
 
 ### Registry Separation Strategy
