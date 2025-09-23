@@ -1,5 +1,62 @@
 # Flux Demo - Distributed Tracing with OpenTelemetry
 
+## 📌 TL;DR
+
+**What**: Production-ready GitOps demo with Flux, featuring distributed tracing, progressive deployments, and multi-environment promotion.
+
+**Key Features**:
+- 🚀 **GitOps with Flux** - Automated deployments with Git as single source of truth
+- 🔍 **Distributed Tracing** - OpenTelemetry auto-instrumentation for Java & Node.js services
+- 📦 **Multi-Environment** - Dev → Staging → Production promotion with image automation
+- 🔄 **Progressive Deployments** - Canary, Blue-Green, Feature Flags, A/B Testing
+- 🔐 **Enterprise Ready** - SOC2/ISO27001 compliant registry separation options
+- 🏭 **CI/CD Pipelines** - GitHub Actions & GitLab CI with automated versioning
+- 🎯 **Zero-Code Instrumentation** - OpenTelemetry Operator handles all tracing
+
+**Quick Start**: Jump to [Prerequisites](#-prerequisites) → [Quick Start](#-quick-start) → [Verify Installation](#verify-installation)
+
+## 📚 Table of Contents
+
+- [TL;DR](#-tldr)
+- [Real-World GitOps Repository Architecture](#️-real-world-gitops-repository-architecture)
+  - [Repository Separation Strategy](#repository-separation-strategy)
+  - [Real-World Workflow](#real-world-workflow)
+- [Image Tagging and Promotion Strategy](#image-tagging-and-promotion-strategy)
+  - [Option 1: Single Registry](#option-1-single-registry-with-tag-based-promotion-simpler-setup)
+  - [Option 2: Multi-Registry (Compliance)](#option-2-multi-registry-strategy-soc2iso27001-compliance)
+  - [Choosing Between Strategies](#choosing-between-single-and-multi-registry)
+  - [CI/CD Pipeline Examples](#cicd-pipeline-examples)
+- [Progressive Deployment Strategies](#progressive-deployment-strategies)
+  - [Canary Deployments](#1-canary-deployments-with-flagger)
+  - [Blue-Green Deployments](#2-blue-green-deployments)
+  - [Feature Flags](#3-feature-flag-deployments)
+  - [A/B Testing](#4-ab-testing-deployments)
+  - [Strategy Comparison](#progressive-deployment-comparison)
+- [GitLab-Flux Agent Integration](#gitlab-flux-agent-integration)
+  - [Benefits & Setup](#native-gitlab-integration-benefits)
+  - [Migration Guide](#migration-from-standalone-flux)
+- [Registry Separation Strategy](#registry-separation-strategy)
+- [Current Demo Repository Structure](#-current-demo-repository-structure)
+- [Features](#-features)
+- [Architecture](#-architecture)
+  - [Services](#services)
+  - [Observability Stack](#observability-stack)
+  - [GitOps Components](#gitops-components)
+- [Prerequisites](#-prerequisites)
+- [Quick Start](#-quick-start)
+- [Verify Installation](#verify-installation)
+- [Service Endpoints](#-service-endpoints)
+- [Development](#-development)
+  - [Java Service](#java-service)
+  - [Node Service](#node-service)
+- [CI/CD Pipelines](#-cicd-pipelines)
+- [Troubleshooting](#-troubleshooting)
+- [Production Considerations](#-production-considerations)
+- [Contributing](#-contributing)
+- [License](#-license)
+
+---
+
 This repository demonstrates a cloud-native microservices architecture with distributed tracing using Flux GitOps, OpenTelemetry auto-instrumentation, and observability best practices.
 
 ## 🏗️ Real-World GitOps Repository Architecture
